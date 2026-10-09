@@ -22,4 +22,7 @@ jobs:
       - name: Vérifier le style et les erreurs
         run: python -m ruff check src tests
       - name: Exécuter les tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+          OVERLOAD_DATA_DIR: ${{ runner.temp }}\overload-data-ci
         run: python -m pytest

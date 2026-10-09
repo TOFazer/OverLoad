@@ -5,6 +5,7 @@ from __future__ import annotations
 import http.server
 import re
 import threading
+import time
 
 import pytest
 
@@ -15,7 +16,9 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, *args):  # silence
         pass
 
-    def _send_file(self, data: bytes, *, truncate_at: int | None = None) -> None:
+    def _send_file(
+        self, data: bytes, *, truncate_at: int | None = None, delay: float = 0.0
+    ) -> None:
         range_header = self.headers.get("Range")
         status, start = 200, 0
         if range_header:
@@ -33,6 +36,13 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self.wfile.flush()
             self.close_connection = True
             return
+        if delay:
+            # Envoi lent par blocs de 64 Ko : permet de mettre en pause ou d'annuler en cours.
+            for start_at in range(0, len(body), 64 * 1024):
+                self.wfile.write(body[start_at : start_at + 64 * 1024])
+                self.wfile.flush()
+                time.sleep(delay)
+            return
         self.wfile.write(body)
 
     def do_GET(self):  # noqa: N802
@@ -41,6 +51,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         elif self.path == "/truncated.bin":
             # Annonce 1 Mio, coupe après 100 Ko.
             self._send_file(PAYLOAD, truncate_at=100 * 1024)
+        elif self.path == "/slow.bin":
+            self._send_file(PAYLOAD, delay=0.05)
         elif self.path == "/empty.bin":
             self._send_file(b"")
         elif self.path == "/redirect-file":

@@ -33,6 +33,10 @@ class DownloadCancelled(OverloadError):
     """L'utilisateur a annulé le téléchargement ; le .part est supprimé."""
 
 
+class DownloadPaused(OverloadError):
+    """L'utilisateur a mis le téléchargement en pause ; le .part est conservé."""
+
+
 class _ValidatingRedirectHandler(urllib.request.HTTPRedirectHandler):
     def __init__(self, allow_private_hosts: bool) -> None:
         self._allow_private = allow_private_hosts
@@ -67,6 +71,7 @@ def download_to(
     allow_private_hosts: bool = False,
     progress: ProgressCallback | None = None,
     cancel_event: threading.Event | None = None,
+    pause_event: threading.Event | None = None,
 ) -> Path:
     """Télécharge `url` vers `target` (chemin choisi via plan_destination).
 
@@ -124,6 +129,9 @@ def download_to(
                     handle.close()
                     part.unlink(missing_ok=True)
                     raise DownloadCancelled("Téléchargement annulé.")
+                if pause_event is not None and pause_event.is_set():
+                    handle.flush()
+                    raise DownloadPaused("Téléchargement mis en pause.")
                 try:
                     chunk = response.read(CHUNK_SIZE)
                 except (OSError, http.client.HTTPException) as exc:

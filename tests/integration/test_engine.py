@@ -4,7 +4,7 @@ import pytest
 
 from overload.core.errors import OverloadError
 from overload.downloads.engine import DownloadCancelled, download_to
-from tests.integration.conftest import PAYLOAD
+from tests.conftest import PAYLOAD
 
 
 def _target(tmp_path, name="video.bin"):
