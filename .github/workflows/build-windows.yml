@@ -68,7 +68,16 @@ jobs:
           & .\dist\OverLoad.exe --self-test
           $exitCode = $LASTEXITCODE
           $log = Join-Path $env:OVERLOAD_DATA_DIR "logs\overload.log"
-          if (Test-Path $log) { Get-Content $log }
+          if (Test-Path $log) {
+            $details = (Get-Content $log -Raw).Trim()
+            Write-Host $details
+            if ($exitCode -ne 0) {
+              $annotation = $details.Replace("%", "%25").Replace("`r", "%0D").Replace("`n", "%0A")
+              Write-Output "::error title=OverLoad self-test details::$annotation"
+            }
+          } else {
+            Write-Host "Journal d'auto-test absent : $log"
+          }
           Write-Host "Code de sortie de l'auto-test : $exitCode"
           if ($exitCode -ne 0) { throw "L'auto-test d'OverLoad.exe a échoué (code $exitCode)." }
       - name: Sommes de contrôle
