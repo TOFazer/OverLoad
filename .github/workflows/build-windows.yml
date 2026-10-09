@@ -63,6 +63,7 @@ jobs:
         shell: pwsh
         env:
           OVERLOAD_DATA_DIR: ${{ runner.temp }}\overload-data-selftest
+          QT_QPA_PLATFORM: windows
         run: |
           & .\dist\OverLoad.exe --self-test
           if ($LASTEXITCODE -ne 0) { throw "L'auto-test d'OverLoad.exe a échoué (code $LASTEXITCODE)." }
