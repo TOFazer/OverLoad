@@ -42,23 +42,33 @@ def _excepthook(exc_type, exc, tb) -> None:  # noqa: ANN001
 
 def self_test() -> int:
     """Crée la fenêtre sans l'afficher : vérifie que l'application est complète."""
-    from PySide6.QtWidgets import QApplication
-
-    from overload.app.main_window import MainWindow
-    from overload.downloads.manager import DownloadManager
-
-    app = QApplication.instance() or QApplication(sys.argv[:1])
-    settings = load_settings(settings_file())
-    manager = DownloadManager(max_workers=1)
+    manager = None
     try:
+        from PySide6.QtWidgets import QApplication
+
+        from overload.app.main_window import MainWindow
+        from overload.downloads.manager import DownloadManager
+
+        app = QApplication.instance() or QApplication(sys.argv[:1])
+        settings = load_settings(settings_file())
+        manager = DownloadManager(max_workers=1)
         window = MainWindow(settings, settings_file(), manager)
-        ok = window.stack.count() == 4 and window.nav.count() == 4
+        stack_count = window.stack.count()
+        nav_count = window.nav.count()
+        ok = stack_count == 4 and nav_count == 4
+        log.info("Auto-test : stack=%d, navigation=%d", stack_count, nav_count)
         app.processEvents()
         window.close()
+        log.info("Auto-test : %s", "OK" if ok else "ÉCHEC")
+        return 0 if ok else 1
+    except Exception:
+        # En mode fenêtre sans console, conserver l'erreur dans le journal plutôt
+        # que d'afficher une boîte modale qui bloquerait l'auto-test de la CI.
+        log.exception("Auto-test de démarrage échoué")
+        return 1
     finally:
-        manager.shutdown()
-    log.info("Auto-test : %s", "OK" if ok else "ÉCHEC")
-    return 0 if ok else 1
+        if manager is not None:
+            manager.shutdown()
 
 
 def main(argv: list[str] | None = None) -> int:
