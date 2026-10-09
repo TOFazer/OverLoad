@@ -62,3 +62,14 @@ def test_rejects_credentials_in_url():
 def test_rejects_empty_or_incomplete(url):
     with pytest.raises(OverloadError):
         validate_direct_url(url)
+
+
+@pytest.mark.parametrize("url", [
+    "https://example.com:abc/a.mp4",
+    "https://example.com:0/a.mp4",
+    "https://example.com:99999/a.mp4",
+    "https://example.com/a.mp4\r\nInjected: yes",
+])
+def test_rejects_bad_ports_and_control_chars(url):
+    with pytest.raises(OverloadError):
+        validate_direct_url(url)

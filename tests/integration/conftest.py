@@ -15,10 +15,13 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, *args):  # silence
         pass
 
-    def _send_file(self, data: bytes, *, truncate_at: int | None = None) -> None:
+    def _send_file(
+        self, data: bytes, *, truncate_at: int | None = None,
+        ignore_range: bool = False, wrong_range: bool = False,
+    ) -> None:
         range_header = self.headers.get("Range")
         status, start = 200, 0
-        if range_header:
+        if range_header and not ignore_range:
             match = re.match(r"bytes=(\d+)-", range_header)
             if match:
                 start = int(match.group(1))
@@ -27,6 +30,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Accept-Ranges", "bytes")
+        self.send_header("ETag", '"fixture-v1"')
+        if status == 206:
+            begin = start + 1 if wrong_range else start
+            self.send_header("Content-Range", f"bytes {begin}-{len(data) - 1}/{len(data)}")
         self.end_headers()
         if truncate_at is not None:
             self.wfile.write(body[:truncate_at])
@@ -41,6 +48,15 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         elif self.path == "/truncated.bin":
             # Annonce 1 Mio, coupe après 100 Ko.
             self._send_file(PAYLOAD, truncate_at=100 * 1024)
+        elif self.path == "/no-range.bin":
+            self._send_file(PAYLOAD, ignore_range=True)
+        elif self.path == "/bad-range.bin":
+            self._send_file(PAYLOAD, wrong_range=True)
+        elif self.path == "/html":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.end_headers()
+            self.wfile.write(b"<html>not a file</html>")
         elif self.path == "/empty.bin":
             self._send_file(b"")
         elif self.path == "/redirect-file":
@@ -55,6 +71,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 @pytest.fixture(scope="session")
 def server():
     httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+    httpd.handle_error = lambda *args: None  # annulation et coupure prévues dans les tests
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
     host, port = httpd.server_address

@@ -12,6 +12,7 @@ dist/
 # Données locales et médias : ne jamais commiter
 OverLoad-data/
 *.part
+*.part.json
 *.mp4
 *.mkv
 *.mov

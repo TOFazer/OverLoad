@@ -47,6 +47,8 @@ def validate_direct_url(url: str, *, allow_private_hosts: bool = False) -> str:
             "Aucune adresse n'a été saisie.",
             action="Collez une adresse de fichier.",
         )
+    if any(ord(char) < 32 or ord(char) == 127 for char in cleaned):
+        raise OverloadError("Adresse mal formée.", "caractère de contrôle interdit.")
     if len(cleaned) > MAX_URL_LENGTH:
         raise OverloadError(
             "Adresse trop longue.",
@@ -72,6 +74,12 @@ def validate_direct_url(url: str, *, allow_private_hosts: bool = False) -> str:
             "Retirez-les de l'adresse : OverLoad ne les utilise pas.",
         )
 
+    try:
+        port = parts.port
+    except ValueError as exc:
+        raise OverloadError("Port réseau invalide.", str(exc)) from exc
+    if port == 0:
+        raise OverloadError("Port réseau invalide.")
     host = (parts.hostname or "").lower().rstrip(".")
     if not host:
         raise OverloadError("Adresse incomplète.", "nom de domaine absent.", "Vérifiez l'adresse.")

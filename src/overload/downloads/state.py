@@ -22,11 +22,11 @@ class TaskState(StrEnum):
 
 
 _TRANSITIONS: dict[TaskState, frozenset[TaskState]] = {
-    TaskState.QUEUED: frozenset({TaskState.RUNNING, TaskState.CANCELLED}),
+    TaskState.QUEUED: frozenset({TaskState.RUNNING, TaskState.PAUSED, TaskState.CANCELLED}),
     TaskState.RUNNING: frozenset(
         {TaskState.PAUSED, TaskState.FINALIZING, TaskState.FAILED, TaskState.CANCELLED}
     ),
-    TaskState.PAUSED: frozenset({TaskState.RUNNING, TaskState.CANCELLED}),
+    TaskState.PAUSED: frozenset({TaskState.QUEUED, TaskState.RUNNING, TaskState.CANCELLED}),
     TaskState.FINALIZING: frozenset({TaskState.COMPLETED, TaskState.FAILED}),
     TaskState.FAILED: frozenset({TaskState.QUEUED}),  # relance manuelle
     TaskState.CANCELLED: frozenset({TaskState.QUEUED}),

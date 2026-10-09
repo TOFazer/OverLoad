@@ -23,3 +23,9 @@ jobs:
         run: python -m ruff check src tests
       - name: Exécuter les tests
         run: python -m pytest
+      - name: Vérifier le démarrage de l'interface hors écran
+        shell: pwsh
+        run: |
+          python -m pip install -e ".[gui]"
+          $env:QT_QPA_PLATFORM = 'offscreen'
+          python -c "from PySide6.QtWidgets import QApplication; from overload.ui.main import MainWindow; import tempfile; from pathlib import Path; from unittest.mock import patch; app=QApplication([]); d=tempfile.TemporaryDirectory(); p=patch('overload.ui.main.data_directory', return_value=Path(d.name)); p.start(); w=MainWindow(); w.close(); p.stop(); d.cleanup()"

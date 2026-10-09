@@ -53,7 +53,13 @@ def test_truncated_download_is_incomplete_and_kept_for_resume(server, tmp_path):
 def test_resume_completes_partial_file(server, tmp_path):
     part = tmp_path / "video.bin.part"
     part.write_bytes(PAYLOAD[:200_000])
-    target = _target(tmp_path)
+    import json
+
+    (tmp_path / "video.bin.part.json").write_text(json.dumps({
+        "url": f"{server}/ok.bin", "validator": '"fixture-v1"',
+        "size": 200_000, "total": len(PAYLOAD),
+    }))
+    target = tmp_path / "video.bin"
     download_to(f"{server}/ok.bin", target, allow_private_hosts=True)
     assert target.read_bytes() == PAYLOAD
 
@@ -98,3 +104,78 @@ def test_cancel_removes_partial_file(server, tmp_path):
         )
     assert not target.exists()
     assert not (tmp_path / "video.bin.part").exists()
+
+
+def test_pause_preserves_partial_and_resumes(server, tmp_path):
+    from overload.downloads.engine import DownloadPaused
+
+    pause = threading.Event()
+    target = tmp_path / "pause.bin"
+
+    def progress(done, total):
+        if done > 0:
+            pause.set()
+
+    with pytest.raises(DownloadPaused):
+        download_to(
+            f"{server}/ok.bin", target, allow_private_hosts=True,
+            pause_event=pause, progress=progress,
+        )
+    assert 0 < (tmp_path / "pause.bin.part").stat().st_size < len(PAYLOAD)
+    assert (tmp_path / "pause.bin.part.json").exists()
+    download_to(f"{server}/ok.bin", target, allow_private_hosts=True)
+    assert target.read_bytes() == PAYLOAD
+    assert not (tmp_path / "pause.bin.part.json").exists()
+
+
+def test_partial_without_provenance_restarts_safely(server, tmp_path):
+    (tmp_path / "unsafe.bin.part").write_bytes(b"malicious bytes")
+    target = tmp_path / "unsafe.bin"
+    download_to(f"{server}/ok.bin", target, allow_private_hosts=True)
+    assert target.read_bytes() == PAYLOAD
+
+
+def test_server_ignores_range_restarts_not_appends(server, tmp_path):
+    pause = threading.Event()
+    from overload.downloads.engine import DownloadPaused
+
+    target = tmp_path / "ignored.bin"
+    with pytest.raises(DownloadPaused):
+        download_to(
+            f"{server}/no-range.bin", target, allow_private_hosts=True,
+            pause_event=pause, progress=lambda done, total: pause.set() if done else None,
+        )
+    download_to(f"{server}/no-range.bin", target, allow_private_hosts=True)
+    assert target.read_bytes() == PAYLOAD
+
+
+def test_bad_content_range_is_not_appended(server, tmp_path):
+    import json
+
+    target = tmp_path / "bad.bin"
+    part = tmp_path / "bad.bin.part"
+    part.write_bytes(PAYLOAD[:10])
+    (tmp_path / "bad.bin.part.json").write_text(json.dumps({
+        "url": f"{server}/bad-range.bin", "validator": '"fixture-v1"',
+        "size": 10, "total": len(PAYLOAD),
+    }))
+    with pytest.raises(OverloadError, match="reprise invalide"):
+        download_to(f"{server}/bad-range.bin", target, allow_private_hosts=True)
+    assert part.read_bytes() == PAYLOAD[:10]
+
+
+def test_reject_html_and_size_limit(server, tmp_path):
+    with pytest.raises(OverloadError, match="page Web"):
+        download_to(f"{server}/html", tmp_path / "page.mp4", allow_private_hosts=True)
+    with pytest.raises(OverloadError, match="volumineux"):
+        download_to(f"{server}/ok.bin", tmp_path / "large.bin", max_bytes=99,
+                    allow_private_hosts=True)
+    assert not (tmp_path / "large.bin.part").exists()
+
+
+def test_sha256_mismatch_does_not_publish(server, tmp_path):
+    target = tmp_path / "hash.bin"
+    with pytest.raises(OverloadError, match="SHA-256 différente"):
+        download_to(f"{server}/ok.bin", target, sha256="0" * 64, allow_private_hosts=True)
+    assert not target.exists()
+    assert not (tmp_path / "hash.bin.part").exists()

@@ -52,3 +52,20 @@ def test_plan_destination_avoids_pending_part_file(tmp_path):
 def test_is_inside(tmp_path):
     assert is_inside(tmp_path, tmp_path / "a.mp4")
     assert not is_inside(tmp_path, tmp_path / ".." / "outside.mp4")
+
+
+def test_destination_reuses_only_matching_partial(tmp_path):
+    import json
+
+    from overload.downloads.files import destination_for_url
+
+    (tmp_path / "clip.mp4.part").write_bytes(b"partial")
+    (tmp_path / "clip.mp4.part.json").write_text(json.dumps({
+        "url": "https://example.org/clip.mp4", "validator": '"v1"',
+    }))
+    assert destination_for_url(
+        tmp_path, "clip.mp4", "https://example.org/clip.mp4"
+    ).name == "clip.mp4"
+    assert destination_for_url(
+        tmp_path, "clip.mp4", "https://other.org/clip.mp4"
+    ).name == "clip (2).mp4"

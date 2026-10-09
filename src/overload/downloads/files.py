@@ -75,3 +75,19 @@ def plan_destination(directory: Path, name: str) -> Path:
     if not is_inside(directory, candidate):
         raise OverloadError("Nom de fichier refusé.", "le chemin sort du dossier choisi.")
     return candidate
+
+
+def destination_for_url(directory: Path, name: str, url: str) -> Path:
+    """Réutilise un .part uniquement s'il a une preuve de reprise pour cette URL."""
+    import json
+
+    candidate = directory / sanitize_filename(name)
+    part = candidate.with_name(candidate.name + PART_SUFFIX)
+    if not candidate.exists() and part.is_file() and is_inside(directory, candidate):
+        try:
+            data = json.loads(Path(str(part) + ".json").read_text(encoding="utf-8"))
+            if data.get("url") == url and data.get("validator"):
+                return candidate
+        except (OSError, ValueError, AttributeError):
+            pass
+    return plan_destination(directory, name)
