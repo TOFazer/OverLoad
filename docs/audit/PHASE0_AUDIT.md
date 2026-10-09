@@ -2,7 +2,7 @@
 
 > Document de travail. Date : 2026-10-09. Branche : `arena/0c60ad48-overload` (base : `main` @ `c3cb69f`).
 
-Ce document répond aux points 1 à 10 de la Phase 0 du plan de développement, à partir de l'état réel du dépôt. Il ne contient aucune décision technique déjà prise : les choix marqués **[DÉCISION]** doivent être validés avant la Phase 1.
+Ce document répond aux points 1 à 10 de la Phase 0 du plan de développement, à partir de l'état réel du dépôt. Les choix marqués **[DÉCISION n]** ont été tranchés par le propriétaire du projet ; le statut de chacun figure en section 15.
 
 ---
 
@@ -86,7 +86,7 @@ Le plan demande de choisir selon le dépôt. Le dépôt étant vide, la décisio
 
 Raisons : le traitement de fichiers, yt-dlp et l'appel à FFmpeg sont naturels en Python, la séparation des modules est simple à tester avec `pytest`, et la chaîne de build reste compréhensible pour un mainteneur seul. Le principal coût est la taille du livrable et la maintenance de l'interface Qt, à mesurer dès le prototype.
 
-**[DÉCISION 1]** Valider cette technologie ou choisir Tauri.
+**[DÉCISION 1]** Validée : Python + PySide6.
 
 ---
 
@@ -112,7 +112,7 @@ Le plan demande de ne télécharger que depuis des **sources officiellement pris
 2. Désactiver tous les extracteurs yt-dlp hors de cette liste, plutôt que de les laisser disponibles par défaut.
 3. Afficher, pour chaque source, une explication de ce qui est et n'est pas permis.
 
-**[DÉCISION 2]** Quelles sources figurent dans la première version ?
+**[DÉCISION 2]** Validée : fichiers directs HTTP(S) uniquement en v1.
 
 ---
 
@@ -188,7 +188,7 @@ Version portable : données dans `OverLoad-data\` à côté de l'exécutable, te
 
 ## 12. Liste de tâches (Phases 1 à 9)
 
-Légende : ✅ fait · 🟡 en cours · ⬜ à faire · 🔒 bloqué par une décision.
+Légende : ✅ fait · ⬜ à faire.
 
 ### Phase 0 — Audit et organisation
 - ✅ 1. Examiner le dépôt
@@ -201,19 +201,22 @@ Légende : ✅ fait · 🟡 en cours · ⬜ à faire · 🔒 bloqué par une dé
 - ✅ 8. Définir l'architecture cible (§11)
 - ✅ 9. Créer la liste de tâches (§12)
 - ✅ 10. Définir les critères de réussite (§13)
-- 🔒 Choisir la technologie (DÉCISION 1)
-- 🔒 Créer le dépôt `OverLoadDev` (voir §14)
-- ⬜ Ajouter une licence à `OverLoad` (DÉCISION 4)
+- ✅ Choisir la technologie (DÉCISION 1 : Python + PySide6)
+- 🟡 Créer le dépôt `OverLoadDev` (privé, DÉCISION 5) — **non créé** : l'intégration GitHub n'a pas la permission de création de dépôt ; à créer manuellement ou à autoriser
+- ✅ Ajouter une licence à `OverLoad` (MIT, DÉCISION 4)
 
 ### Phase 1 — Fiabilisation
-- ⬜ Socle : structure `overload/`, `pyproject.toml`, `pytest`, lint, CI Windows
-- ⬜ Moteur de téléchargement : états (en attente, en cours, pause, terminé, échec, annulé)
-- ⬜ « Terminé » seulement après finalisation et vérification (taille non nulle, taille attendue, fichier renommé atomiquement)
-- ⬜ Détection des fichiers incomplets et de taille nulle
-- ⬜ Gestion des chemins indisponibles, des noms existants, des écrasements (confirmation)
-- ⬜ Validation des URL et des redirections (schémas autorisés, destinations privées refusées)
-- ⬜ Messages d'erreur structurés (ce qui a échoué, cause probable, action, journal)
-- ⬜ 🔒 Liste blanche des sources (DÉCISION 2)
+- ✅ Socle : structure `src/overload/`, `pyproject.toml`, `pytest`, `ruff`, CI Windows (`.github/workflows/ci.yml`)
+- ✅ Machine d'états des tâches (`downloads/state.py`) : « Terminé » accessible uniquement depuis « Finalisation »
+- ✅ « Terminé » seulement après vérification (taille non nulle, taille annoncée respectée), écriture dans `.part` puis renommage
+- ✅ Détection des fichiers incomplets et de taille nulle ; le `.part` est conservé pour reprise (HTTP Range)
+- ✅ Chemins de destination : dossier absent refusé, noms existants jamais écrasés (« (2) »), noms Windows sûrs
+- ✅ Validation des URL : schémas HTTP(S) seulement, identifiants refusés, adresses locales/privées refusées, redirections revalidées
+- ✅ Messages d'erreur structurés (`core/errors.py` : ce qui a échoué, cause, action)
+- ⬜ Limite connue : protection DNS rebinding (vérification de l'adresse IP résolue à la connexion) — à faire
+- ⬜ Pause effective du téléchargement, file d'attente et limite de tâches simultanées (couche suivante)
+- ⬜ Traductions FR/EN des messages d'erreur (aujourd'hui en français uniquement)
+- ✅ Sources v1 : fichiers directs HTTP(S) uniquement (DÉCISION 2)
 
 ### Phase 2 — Application Windows autonome
 - ⬜ Fenêtre principale, navigation, thème clair/sombre/système
@@ -286,19 +289,21 @@ Chaque critère sera vérifié par un test automatisé ou une procédure écrite
 
 ---
 
-## 14. Actions hors dépôt (à confirmer)
+## 14. Actions hors dépôt
 
-- **Création de `TOFazer/OverLoadDev`.** Je ne l'ai pas créé : le plan laisse le choix de la visibilité (privé ou public). Dites-moi laquelle vous voulez.
+- **Dépôt `TOFazer/OverLoadDev`** : à créer en privé. La création a échoué (`Resource not accessible by integration`) : l'intégration GitHub de la session n'a pas la permission de créer un dépôt. Il faut le créer manuellement ou accorder cette permission.
 - **Secrets de publication.** Aucun secret n'est nécessaire pour la Phase 0. Ils seront configurés dans GitHub Actions (environnement protégé) en Phase 3.
 
 ---
 
-## 15. Décisions attendues
+## 15. Décisions
 
-| # | Décision | Bloque |
+| # | Décision | Statut |
 |---|---|---|
-| 1 | Technologie : Python + PySide6 (recommandé) ou Tauri | Phase 1 |
-| 2 | Liste blanche des sources de la première version | Phase 1 (téléchargements) |
-| 3 | Windows 11 64 bits comme cible officielle | Phase 2 |
-| 4 | Licence de OverLoad (MIT, Apache-2.0, GPL-3.0 ou propriétaire) | Première diffusion publique |
-| 5 | Visibilité de OverLoadDev (privé ou public) | Phase 7 |
+| 1 | Technologie : Python 3.12 + PySide6 + SQLite + FFmpeg LGPL + PyInstaller + Inno Setup | **Validée** |
+| 2 | Sources de la première version : **URL de fichiers directs (HTTP/HTTPS) uniquement**. Aucun extracteur de plateforme ; yt-dlp n'est pas intégré en v1. | **Validée** |
+| 3 | Windows 11 64 bits comme cible officielle | À confirmer en Phase 2 |
+| 4 | Licence de OverLoad : **MIT** | **Validée** (fichier `LICENSE` ajouté) |
+| 5 | Dépôt `OverLoadDev` : **privé** (choix validé, création **en attente** : permission manquante) | Validée, action restante |
+
+Conséquence de la décision 2 : yt-dlp est retiré de la v1 et la section 6 le concerne uniquement pour une étude ultérieure. Toute source supplémentaire exigera une vérification écrite de ses conditions d'utilisation avant intégration.
