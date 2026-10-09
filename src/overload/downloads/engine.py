@@ -20,6 +20,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from overload.core.errors import OverloadError
+from overload.downloads.netguard import pinned_handlers
 from overload.downloads.urls import ALLOWED_SCHEMES, validate_direct_url
 
 CHUNK_SIZE = 64 * 1024
@@ -51,7 +52,10 @@ def _open(url: str, *, offset: int, allow_private_hosts: bool):  # noqa: ANN202
     headers = {"User-Agent": USER_AGENT}
     if offset > 0:
         headers["Range"] = f"bytes={offset}-"
-    opener = urllib.request.build_opener(_ValidatingRedirectHandler(allow_private_hosts))
+    opener = urllib.request.build_opener(
+        *pinned_handlers(allow_private_hosts),
+        _ValidatingRedirectHandler(allow_private_hosts),
+    )
     return opener.open(urllib.request.Request(url, headers=headers), timeout=30)
 
 

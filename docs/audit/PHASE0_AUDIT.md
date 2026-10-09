@@ -57,7 +57,7 @@ Vérifiées le 2026-10-09 via l'API GitHub (licence déclarée par le dépôt) e
 |---|---|---|---|
 | **FFmpeg** | Analyse et conversion | LGPL v2.1+ par défaut ; GPL v2+ si `--enable-gpl` (certaines parties) | Distribuer un build **LGPL** (sans `--enable-gpl`, sans `--enable-nonfree`), en binaire séparé, avec mention de licence et source disponible. Un build GPL impose la GPL à l'application entière. |
 | **yt-dlp** | Moteur de téléchargement possible | Unlicense (domaine public) | Licence permissive. **Le risque est juridique et contractuel, pas technique** : beaucoup de plateformes interdisent le téléchargement dans leurs conditions d'utilisation. Voir la décision sur les sources (§9). |
-| **PyInstaller** | Packaging Python en `.exe` | GPL v2 avec exception « bootloader » | L'exception permet de distribuer le binaire généré sous licence libre de son choix. À confirmer avec le texte officiel avant la Phase 2. |
+| **PyInstaller** | Packaging Python en `.exe` | GPL v2 (ou ultérieure) avec exception « bootloader » | Exception vérifiée sur le texte officiel (`COPYING.txt`) : le bootloader embarqué peut être distribué librement dans un exécutable combiné ; la GPL reste applicable à PyInstaller lui-même. Validation juridique à faire avant diffusion. |
 | **PySide6 (Qt for Python)** | Interface de bureau | LGPL v3 (ou version commerciale) | Respecter les obligations LGPL : permettre le remplacement de la bibliothèque, mentionner la licence. À vérifier au moment du packaging. |
 | **Tauri** | Alternative (interface Web + Rust) | Apache-2.0 / MIT | Permissive. Demande d'apprendre Rust et de gérer un sidecar Python ou FFmpeg. |
 | **Electron** | Alternative (interface Web) | MIT | Permissive. Application lourde (Chromium embarqué). |
@@ -213,7 +213,7 @@ Légende : ✅ fait · ⬜ à faire.
 - ✅ Chemins de destination : dossier absent refusé, noms existants jamais écrasés (« (2) »), noms Windows sûrs
 - ✅ Validation des URL : schémas HTTP(S) seulement, identifiants refusés, adresses locales/privées refusées, redirections revalidées
 - ✅ Messages d'erreur structurés (`core/errors.py` : ce qui a échoué, cause, action)
-- ⬜ Limite connue : protection DNS rebinding (vérification de l'adresse IP résolue à la connexion) — à faire
+- ✅ Protection DNS rebinding : résolution unique par connexion, toutes les adresses contrôlées, connexion uniquement aux adresses validées, SNI et certificat vérifiés sur le nom d'origine, proxy désactivé (`downloads/netguard.py`)
 - ⬜ Pause effective du téléchargement, file d'attente et limite de tâches simultanées (couche suivante)
 - ⬜ Traductions FR/EN des messages d'erreur (aujourd'hui en français uniquement)
 - ✅ Sources v1 : fichiers directs HTTP(S) uniquement (DÉCISION 2)

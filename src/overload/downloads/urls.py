@@ -3,10 +3,9 @@
 Version 1 : seules les URL HTTP(S) qui pointent directement vers un fichier
 sont acceptées. Aucun extracteur de plateforme n'est utilisé.
 
-Limite connue : la validation porte sur l'URL et sur les adresses littérales
-(IP ou localhost). Elle ne protège pas contre un nom de domaine qui résout
-vers une adresse privée (DNS rebinding) ; ce point sera traité au niveau de
-la connexion en Phase 1 suivante.
+Ce module contrôle la forme de l'URL et les adresses littérales (IP, localhost).
+La vérification des adresses réellement contactées (y compris après résolution
+DNS et redirections) est faite par `netguard.py` au moment de la connexion.
 """
 
 from __future__ import annotations
