@@ -10,6 +10,20 @@
 
 ---
 
+## Installer la dernière version
+
+- **[Télécharger l'installateur Windows](https://github.com/TOFazer/OverLoad/releases/latest/download/OverLoad-Setup.exe)** — Windows 11, 64 bits.
+- [Version portable (.zip)](https://github.com/TOFazer/OverLoad/releases/latest/download/OverLoad-Portable-win64.zip) · [Notes de version](https://github.com/TOFazer/OverLoad/releases/latest) · [Empreintes SHA-256](https://github.com/TOFazer/OverLoad/releases/latest/download/SHA256SUMS.txt).
+- Site de téléchargement, après activation de GitHub Pages : **<https://tofazer.github.io/OverLoad/>**.
+
+Ces liens suivent **toujours la dernière release stable**, sans changement du site.
+Ils deviennent disponibles après la publication d'une première release et la fin du build Windows.
+Téléchargez `OverLoad-Setup.exe`, puis lancez-le pour installer l'application.
+Pour mettre à jour une installation existante, fermez OverLoad et relancez le nouvel installateur
+(ce n'est pas une mise à jour automatique dans l'application).
+
+**Mainteneur :** [activer le site et publier les versions suivantes](docs/RELEASES.md).
+
 ## Fonctionnalités intégrées dans l'application (`OverLoad.exe`)
 
 - **Application de bureau Windows native (`PySide6` / Qt)** avec thèmes **Sombre** et **Clair**, courbe de débit en direct et préférences persistantes (`settings.json`).
@@ -52,6 +66,11 @@ Chaque push déclenche automatiquement la compilation sur **GitHub Actions (`win
 - `OverLoad-Portable-win64.zip` — version portable isolée (`OverLoad-data\`) ;
 - `SHA256SUMS.txt` — empreintes SHA-256 vérifiables.
 
+La publication d'une **release GitHub** déclenche le même build sur son tag, avec sa version,
+puis joint automatiquement ces fichiers à la release après réussite des tests.
+Le site utilise les liens `releases/latest/download/…` : aucune URL à modifier pour les versions
+suivantes. Voir le [guide de publication](docs/RELEASES.md).
+
 Pour compiler `OverLoad.exe` en local sous Windows (Python 3.11+ et GitHub CLI `gh`) :
 
 ```powershell
@@ -77,4 +96,5 @@ overload
 ```bash
 python -m ruff check src tests scripts
 python -m pytest
+node --test tests/web/releases.test.mjs
 ```
