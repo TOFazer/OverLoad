@@ -95,13 +95,13 @@ def build_stylesheet(theme: str = "dark") -> str:
     QPushButton:hover {{
         border: 1px solid {accent};
     }}
-    QPushButton#primaryBtn {{
+    QPushButton#primaryBtn, QPushButton[primary="true"] {{
         background-color: {accent};
         color: {accent_ink};
         border: 1px solid {accent};
         font-weight: 700;
     }}
-    QPushButton#primaryBtn:hover {{
+    QPushButton#primaryBtn:hover, QPushButton[primary="true"]:hover {{
         background-color: {accent_hover};
     }}
     QPushButton:checked {{

@@ -25,7 +25,7 @@ def test_desktop_window_renders_tasks_history_and_settings(server, tmp_path):
             allow_private_hosts=True,
         ) as manager,
     ):
-        win = create_main_window(manager, history, settings_store)
+        win = create_main_window(manager, history, settings_store, data_dir=tmp_path)
         win.show()
         app.processEvents()
 

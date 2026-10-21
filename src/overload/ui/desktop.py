@@ -92,6 +92,8 @@ def create_main_window(
     manager: DownloadManager,
     history: DownloadHistoryStore,
     settings_store: SettingsStore,
+    *,
+    data_dir: Path | None = None,
 ) -> QMainWindow:
     """Construit et retourne la fenêtre principale `QMainWindow` d'OverLoad."""
     from PySide6.QtCore import QPointF, Qt, QTimer
@@ -366,7 +368,7 @@ def create_main_window(
 
     prefs = settings_store.get()
     window = QMainWindow()
-    window.setWindowTitle("OverLoad — Gestionnaire de téléchargements intelligent")
+    window.setWindowTitle("OverLoad — Téléchargements, analyse multimédia & espace Créateurs")
     window.resize(1180, 820)
     app_icon = create_app_icon()
     window.setWindowIcon(app_icon)
@@ -452,6 +454,12 @@ def create_main_window(
     top_layout.addWidget(theme_btn)
     root_vbox.addWidget(topbar)
 
+    # Page « Téléchargements » : réglages + ajout de liens + tâches/historique.
+    downloads_page = QWidget()
+    downloads_vbox = QVBoxLayout(downloads_page)
+    downloads_vbox.setContentsMargins(0, 0, 0, 0)
+    downloads_vbox.setSpacing(12)
+
     # 2. Barre de réglages intelligents en direct
     controls_card = QFrame()
     controls_card.setObjectName("panelCard")
@@ -511,7 +519,7 @@ def create_main_window(
     controls_row.addWidget(auto_retry_chk)
     controls_row.addWidget(retries_spin)
     controls_row.addStretch()
-    root_vbox.addWidget(controls_card)
+    downloads_vbox.addWidget(controls_card)
 
     # 3. Zone d'ajout (Lien unique + Lot de liens)
     composer_card = QFrame()
@@ -575,9 +583,7 @@ def create_main_window(
 
     tabs.addTab(create_analyzer_widget(), "Analyse multimédia")
     composer_vbox.addWidget(tabs)
-    root_vbox.addWidget(composer_card)
-
-    # 4. Diviseur vertical : Téléchargements actifs (haut) + Historique SQLite (bas)
+    downloads_vbox.addWidget(composer_card)
     splitter = QSplitter(Qt.Orientation.Vertical)
 
     tasks_panel = QFrame()
@@ -669,7 +675,18 @@ def create_main_window(
     splitter.addWidget(hist_panel)
     splitter.setStretchFactor(0, 3)
     splitter.setStretchFactor(1, 2)
-    root_vbox.addWidget(splitter, stretch=1)
+    downloads_vbox.addWidget(splitter, stretch=1)
+
+    # 5. Espaces principaux : Téléchargements & analyse + Espace Créateurs
+    from overload.ui.creators import create_creators_widget
+
+    main_tabs = QTabWidget()
+    main_tabs.setObjectName("mainTabs")
+    main_tabs.addTab(downloads_page, "⬇ Téléchargements & analyse")
+    main_tabs.addTab(
+        create_creators_widget(history=history, data_dir=data_dir), "🎬 Espace Créateurs"
+    )
+    root_vbox.addWidget(main_tabs, stretch=1)
 
     # Gestionnaires d'événements et synchronisation temps réel
     card_widgets: dict[str, TaskCardWidget] = {}
@@ -994,7 +1011,7 @@ def launch_desktop_app(
     app.setApplicationName("OverLoad")
     app.setWindowIcon(create_app_icon())
 
-    window = create_main_window(manager, history, settings_store)
+    window = create_main_window(manager, history, settings_store, data_dir=base_data)
     window.show()
 
     if self_test:
