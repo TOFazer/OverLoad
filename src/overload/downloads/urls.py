@@ -11,6 +11,8 @@ DNS et redirections) est faite par `netguard.py` au moment de la connexion.
 from __future__ import annotations
 
 import ipaddress
+import re
+from collections.abc import Iterable
 from urllib.parse import urlsplit
 
 from overload.core.errors import OverloadError
@@ -91,3 +93,28 @@ def validate_direct_url(url: str, *, allow_private_hosts: bool = False) -> str:
             )
 
     return cleaned
+
+
+_INLINE_SPLIT = re.compile(r"[\s;]+")
+
+
+def parse_url_list(source: str | Iterable[str]) -> list[tuple[int, str]]:
+    """Extrait une liste ordonnée de couples `(numéro_de_ligne, adresse)` depuis un lot.
+
+    Ignore les lignes vides et les commentaires débutant par `#`. Accepte plusieurs
+    adresses séparées par des espaces ou points-virgules sur une même ligne.
+    """
+    lines = source.splitlines() if isinstance(source, str) else list(source)
+    entries: list[tuple[int, str]] = []
+    for index, raw_line in enumerate(lines, start=1):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        tokens = [tok.strip() for tok in _INLINE_SPLIT.split(line) if tok.strip()]
+        if len(tokens) > 1 and all("://" in tok for tok in tokens):
+            for tok in tokens:
+                entries.append((index, tok))
+        else:
+            entries.append((index, line))
+    return entries
+

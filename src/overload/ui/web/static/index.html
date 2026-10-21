@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OverLoad — Gestionnaire de téléchargements intelligent</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Barre supérieure : identité, télémétrie globale, réglages rapides -->
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">⚡</div>
+        <div>
+          <div class="brand-row">
+            <h1>OverLoad</h1>
+            <span class="version-pill">v0.1</span>
+          </div>
+          <p class="brand-subtitle">Gestionnaire de téléchargements intelligent</p>
+        </div>
+      </div>
+
+      <div class="telemetry-cluster">
+        <div class="metric-card speed-card">
+          <div class="metric-meta">
+            <span class="metric-label">Vitesse réelle globale</span>
+            <strong id="global-speed" class="metric-value tabular">0 o/s</strong>
+          </div>
+          <svg id="speed-sparkline" class="sparkline" viewBox="0 0 120 32" preserveAspectRatio="none" aria-hidden="true">
+            <path id="sparkline-area" class="sparkline-area" d=""></path>
+            <path id="sparkline-line" class="sparkline-line" d=""></path>
+          </svg>
+        </div>
+
+        <div class="metric-card">
+          <span class="metric-label">File active</span>
+          <strong id="slot-usage" class="metric-value tabular">0 / 3 actifs</strong>
+          <span id="queue-summary" class="metric-sub tabular">0 en attente · 0 en pause</span>
+        </div>
+
+        <div id="network-card" class="metric-card network-healthy">
+          <span class="metric-label">État de la connexion</span>
+          <div class="network-status-row">
+            <span class="status-dot"></span>
+            <strong id="network-status-text" class="metric-network-text">Connexion stable</strong>
+          </div>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <button id="btn-open-dest" type="button" class="btn btn-secondary" title="Ouvrir le dossier de téléchargements">
+          <span aria-hidden="true">📁</span>
+          <span>Ouvrir le dossier</span>
+        </button>
+        <button id="btn-theme" type="button" class="btn btn-ghost icon-btn" title="Basculer le thème clair / sombre" aria-label="Basculer le thème">
+          🌓
+        </button>
+      </div>
+    </header>
+
+    <!-- Barre de contrôle intelligent : simultanéité, limite de débit, reprise auto, doublons -->
+    <section class="controls-bar" aria-label="Paramètres intelligents en direct">
+      <div class="control-group">
+        <label class="control-label" for="concurrency-display">Téléchargements simultanés</label>
+        <div class="stepper">
+          <button id="btn-conc-dec" type="button" class="stepper-btn" aria-label="Réduire la limite">−</button>
+          <span id="concurrency-display" class="stepper-val tabular">3</span>
+          <button id="btn-conc-inc" type="button" class="stepper-btn" aria-label="Augmenter la limite">+</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label class="control-label" for="speed-preset">Limite de vitesse Internet</label>
+        <div class="speed-control-row">
+          <select id="speed-preset" class="input select-compact">
+            <option value="0">Illimitée</option>
+            <option value="262144">250 Ko/s</option>
+            <option value="524288">500 Ko/s</option>
+            <option value="1048576">1 Mo/s</option>
+            <option value="2097152">2 Mo/s</option>
+            <option value="5242880">5 Mo/s</option>
+            <option value="10485760">10 Mo/s</option>
+            <option value="custom">Personnalisée…</option>
+          </select>
+          <div id="custom-speed-wrap" class="custom-speed-wrap hidden">
+            <input id="custom-speed-kbps" type="number" min="16" max="1000000" step="50" value="750" class="input input-compact tabular" aria-label="Limite personnalisée en Ko/s" />
+            <span class="unit-tag">Ko/s</span>
+            <button id="btn-apply-speed" type="button" class="btn btn-compact btn-primary">OK</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label class="control-label" for="duplicate-policy">Fichiers déjà présents</label>
+        <select id="duplicate-policy" class="input select-compact">
+          <option value="ask">Demander confirmation</option>
+          <option value="skip">Ignorer automatiquement</option>
+          <option value="rename">Renommer (« nom (2) »)</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <span class="control-label">Reprise auto après erreur</span>
+        <div class="retry-inline">
+          <label class="toggle">
+            <input id="auto-retry-toggle" type="checkbox" checked />
+            <span class="toggle-track"></span>
+          </label>
+          <select id="max-retries-select" class="input select-compact" aria-label="Nombre maximal de tentatives">
+            <option value="1">1 essai</option>
+            <option value="2">2 essais</option>
+            <option value="3" selected>3 essais</option>
+            <option value="5">5 essais</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <main class="workspace">
+      <!-- Panneau d'ajout : lien unique + téléchargement par lots -->
+      <section class="panel composer-panel">
+        <div class="composer-tabs-row">
+          <div class="segmented" role="tablist">
+            <button id="tab-single" type="button" class="seg-btn active" role="tab" aria-selected="true">
+              Lien unique
+            </button>
+            <button id="tab-batch" type="button" class="seg-btn" role="tab" aria-selected="false">
+              Téléchargement par lots (liste de liens)
+            </button>
+          </div>
+
+          <label class="checkbox-inline">
+            <input id="start-paused-check" type="checkbox" />
+            <span>Ajouter en pause</span>
+          </label>
+        </div>
+
+        <!-- Mode lien unique -->
+        <form id="single-form" class="composer-body">
+          <div class="url-row">
+            <input
+              id="single-url-input"
+              type="url"
+              class="input url-input"
+              placeholder="Collez l'adresse directe HTTP(S) d'un fichier (ex. https://exemple.com/video.mp4)…"
+              autocomplete="off"
+              required
+            />
+            <input
+              id="single-filename-input"
+              type="text"
+              class="input filename-input"
+              placeholder="Nom du fichier (optionnel)"
+              autocomplete="off"
+            />
+            <button type="submit" class="btn btn-primary btn-submit">
+              <span>⬇ Télécharger</span>
+            </button>
+          </div>
+          <div id="precheck-banner" class="precheck-banner hidden"></div>
+        </form>
+
+        <!-- Mode lot de liens -->
+        <form id="batch-form" class="composer-body hidden">
+          <textarea
+            id="batch-urls-input"
+            rows="5"
+            class="input batch-textarea"
+            placeholder="Collez une liste de liens (un par ligne, les commentaires # sont ignorés)&#10;https://exemple.com/episode-01.mp4&#10;https://exemple.com/episode-02.mp4&#10;https://exemple.com/bande-son.flac"
+          ></textarea>
+          <div class="batch-actions-row">
+            <div class="batch-left-tools">
+              <label class="btn btn-secondary btn-file">
+                <span>📄 Importer un fichier .txt</span>
+                <input id="batch-file-input" type="file" accept=".txt,text/plain" hidden />
+              </label>
+              <button id="btn-inspect-batch" type="button" class="btn btn-secondary">
+                🔍 Vérifier les liens &amp; doublons
+              </button>
+            </div>
+            <button type="submit" class="btn btn-primary btn-submit">
+              <span>⬇ Lancer le lot</span>
+            </button>
+          </div>
+          <div id="batch-report" class="batch-report hidden"></div>
+        </form>
+
+        <!-- Banc d'essai intégré (affiché uniquement lorsque le serveur démo est actif) -->
+        <div id="demo-bar" class="demo-bar hidden">
+          <span class="demo-tag">Banc d'essai instantané</span>
+          <button id="demo-btn-batch" type="button" class="chip-btn">
+            🎬 Lancer un lot de 4 médias (tester simultanéité, pause &amp; limite de vitesse)
+          </button>
+          <button id="demo-btn-flaky" type="button" class="chip-btn chip-warn">
+            ⚡ Simuler une coupure réseau (reprise auto HTTP Range)
+          </button>
+          <button id="demo-btn-dup" type="button" class="chip-btn">
+            🔍 Tester un fichier déjà présent
+          </button>
+        </div>
+      </section>
+
+      <!-- Liste des téléchargements actifs et en file d'attente -->
+      <section class="panel tasks-panel">
+        <div class="section-header">
+          <div class="section-title-group">
+            <h2>Téléchargements</h2>
+            <div class="filter-pills" id="task-filters">
+              <button type="button" data-filter="all" class="pill active">Tous <span id="cnt-all" class="tabular">0</span></button>
+              <button type="button" data-filter="running" class="pill">En cours <span id="cnt-running" class="tabular">0</span></button>
+              <button type="button" data-filter="queued" class="pill">En attente <span id="cnt-queued" class="tabular">0</span></button>
+              <button type="button" data-filter="paused" class="pill">En pause <span id="cnt-paused" class="tabular">0</span></button>
+              <button type="button" data-filter="failed" class="pill">Problèmes <span id="cnt-failed" class="tabular">0</span></button>
+            </div>
+          </div>
+
+          <div class="bulk-buttons">
+            <button id="btn-pause-all" type="button" class="btn btn-secondary btn-compact">⏸ Tout suspendre</button>
+            <button id="btn-resume-all" type="button" class="btn btn-secondary btn-compact">▶ Tout reprendre</button>
+            <button id="btn-clear-finished" type="button" class="btn btn-ghost btn-compact">Nettoyer les terminés</button>
+          </div>
+        </div>
+
+        <div id="tasks-empty" class="empty-state">
+          <div class="empty-icon" aria-hidden="true">📥</div>
+          <p class="empty-title">Aucun téléchargement actif</p>
+          <p class="empty-desc">
+            Collez une adresse HTTP(S) directe ou une liste de liens ci-dessus pour démarrer.
+          </p>
+        </div>
+
+        <div id="tasks-list" class="tasks-list"></div>
+      </section>
+
+      <!-- Historique persistant des téléchargements -->
+      <section class="panel history-panel">
+        <div class="section-header">
+          <div class="section-title-group">
+            <h2>Historique des téléchargements</h2>
+            <span id="history-count-badge" class="count-badge tabular">0</span>
+          </div>
+
+          <div class="history-toolbar">
+            <input
+              id="history-search"
+              type="search"
+              class="input input-compact history-search"
+              placeholder="Rechercher un nom ou une adresse…"
+            />
+            <select id="history-status-filter" class="input select-compact">
+              <option value="all">Tous les états</option>
+              <option value="completed">Terminés</option>
+              <option value="failed">Échecs</option>
+              <option value="cancelled">Annulés</option>
+            </select>
+            <button id="btn-clear-history" type="button" class="btn btn-ghost btn-compact">
+              Effacer l'historique
+            </button>
+          </div>
+        </div>
+
+        <div id="history-empty" class="empty-state empty-compact">
+          <p class="empty-desc">Les téléchargements terminés, échoués ou annulés apparaissent ici et sont conservés d'une session à l'autre.</p>
+        </div>
+
+        <div id="history-list" class="history-list"></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Fenêtre de détection d'un fichier déjà présent -->
+  <div id="duplicate-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="dup-modal-title">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="dup-modal-title">Fichier déjà présent détecté</h3>
+        <button id="dup-close-btn" type="button" class="btn btn-ghost icon-btn" aria-label="Fermer">✕</button>
+      </div>
+      <p id="dup-modal-reason" class="modal-text"></p>
+      <div id="dup-modal-path" class="path-box"></div>
+      <div class="modal-footer">
+        <button id="dup-open-folder-btn" type="button" class="btn btn-secondary">
+          📁 Ouvrir le dossier existant
+        </button>
+        <button id="dup-skip-btn" type="button" class="btn btn-ghost">
+          Ignorer ce lien
+        </button>
+        <button id="dup-rename-btn" type="button" class="btn btn-primary">
+          Télécharger une copie (« (2) »)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Inspecteur du dossier de téléchargements -->
+  <div id="folder-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="folder-modal-title">
+    <div class="modal-card modal-wide">
+      <div class="modal-header">
+        <div>
+          <h3 id="folder-modal-title">📁 Dossier de téléchargements</h3>
+          <p id="folder-native-note" class="modal-sub"></p>
+        </div>
+        <button id="folder-close-btn" type="button" class="btn btn-ghost icon-btn" aria-label="Fermer">✕</button>
+      </div>
+      <div class="folder-path-bar">
+        <code id="folder-path-code" class="folder-path-code"></code>
+        <button id="btn-copy-folder-path" type="button" class="btn btn-secondary btn-compact">
+          Copier le chemin
+        </button>
+      </div>
+      <div id="folder-files-list" class="folder-files-list"></div>
+    </div>
+  </div>
+
+  <!-- Zone de notifications discrètes -->
+  <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

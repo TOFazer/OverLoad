@@ -214,7 +214,7 @@ Légende : ✅ fait · ⬜ à faire.
 - ✅ Validation des URL : schémas HTTP(S) seulement, identifiants refusés, adresses locales/privées refusées, redirections revalidées
 - ✅ Messages d'erreur structurés (`core/errors.py` : ce qui a échoué, cause, action)
 - ✅ Protection DNS rebinding : résolution unique par connexion, toutes les adresses contrôlées, connexion uniquement aux adresses validées, SNI et certificat vérifiés sur le nom d'origine, proxy désactivé (`downloads/netguard.py`)
-- ⬜ Pause effective du téléchargement, file d'attente et limite de tâches simultanées (couche suivante)
+- ✅ Pause effective du téléchargement, file d'attente, limite de tâches simultanées, limite de vitesse globale, reprise automatique après erreur réseau, détection des doublons, téléchargement par lots, télémétrie temps réel et historique SQLite (`downloads/manager.py`, `downloads/bandwidth.py`, `downloads/duplicates.py`, `downloads/telemetry.py`, `history/store.py`)
 - ⬜ Traductions FR/EN des messages d'erreur (aujourd'hui en français uniquement)
 - ✅ Sources v1 : fichiers directs HTTP(S) uniquement (DÉCISION 2)
 

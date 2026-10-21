@@ -9,7 +9,9 @@ description = "OverLoad — outils multimédias pour Windows (téléchargement, 
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "PySide6-Essentials>=6.8",
+]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.5", "Pillow>=10"]
@@ -18,9 +20,20 @@ build = ["pyinstaller>=6", "Pillow>=10", "PySide6>=6.6"]
 
 [project.scripts]
 overload = "overload.app:main"
+dev = ["pytest>=8", "ruff>=0.5"]
+build = ["pyinstaller>=6.10"]
+
+[project.scripts]
+overload = "overload.__main__:main"
+
+[project.gui-scripts]
+overload-gui = "overload.exe_entry:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"overload.ui.web" = ["static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
