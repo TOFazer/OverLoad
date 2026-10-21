@@ -23,3 +23,6 @@ OverLoad-data/
 # Binaires externes (FFmpeg est distribué à part, pas dans Git)
 ffmpeg.exe
 ffprobe.exe
+
+# Outils et notices téléchargés lors du build
+tools/

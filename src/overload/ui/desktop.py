@@ -571,6 +571,9 @@ def create_main_window(
     batch_vbox.addLayout(batch_btns_row)
     tabs.addTab(batch_page, "Téléchargement par lots (liste de liens)")
 
+    from overload.ui.analyzer import create_analyzer_widget
+
+    tabs.addTab(create_analyzer_widget(), "Analyse multimédia")
     composer_vbox.addWidget(tabs)
     root_vbox.addWidget(composer_card)
 

@@ -28,6 +28,11 @@ jobs:
       - name: Vérifier le style et la qualité (Ruff)
         run: python -m ruff check src tests scripts
 
+      - name: Préparer FFmpeg et FFprobe LGPL pour le paquet Windows
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/prepare_ffmpeg.py
+
       - name: Exécuter la suite complète de tests (moteur + interface native Qt)
         run: python -m pytest -v
 
