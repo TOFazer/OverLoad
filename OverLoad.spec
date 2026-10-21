@@ -9,7 +9,10 @@ a = Analysis(
     [str(ROOT / "src" / "overload" / "exe_entry.py")],
     pathex=[str(ROOT / "src")],
     binaries=[],
-    datas=[(str(ROOT / "src" / "overload" / "ui" / "web" / "static"), "overload/ui/web/static")],
+    datas=[
+        (str(ROOT / "src" / "overload" / "ui" / "web" / "static"), "overload/ui/web/static"),
+        (str(ROOT / "tools"), "tools"),
+    ],
     hiddenimports=[
         "overload.core.errors",
         "overload.core.formatting",

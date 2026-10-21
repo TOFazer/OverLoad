@@ -69,6 +69,9 @@ def _sha256(file_path: Path) -> str:
 def _common_pyinstaller_args(icon_path: Path) -> list[str]:
     sep = ";" if sys.platform == "win32" else ":"
     static_src = ROOT / "src" / "overload" / "ui" / "web" / "static"
+    for name in ("ffmpeg.exe", "ffprobe.exe"):
+        if not (ROOT / "tools" / name).is_file():
+            raise RuntimeError("Exécutez python scripts/prepare_ffmpeg.py avant la compilation.")
     cmd = [
         sys.executable,
         "-m",
@@ -82,6 +85,8 @@ def _common_pyinstaller_args(icon_path: Path) -> list[str]:
         str(icon_path),
         "--add-data",
         f"{static_src}{sep}overload/ui/web/static",
+        "--add-data",
+        f"{ROOT / 'tools'}{sep}tools",
     ]
     for mod in HIDDEN_IMPORTS:
         cmd.extend(["--hidden-import", mod])

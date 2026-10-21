@@ -21,6 +21,27 @@
 - **Historique persistant SQLite** (`library.db`) et bouton **Ouvrir / Rouvrir le dossier** sélectionnant directement le fichier dans l'Explorateur Windows (`explorer.exe /select,...`).
 - **Télémétrie temps réel** : vitesse réelle sur fenêtre glissante, temps restant estimé lissé et diagnostic des éventuels problèmes de connexion.
 
+## Analyseur multimédia Windows
+
+L'onglet **Analyse multimédia** de l'application native permet de sélectionner un fichier local :
+
+- conteneur, codecs, résolution, FPS moyens et débit global/par piste (si renseigné) ;
+- toutes les pistes vidéo, audio et sous-titres, langues, canaux et pistes par défaut/forcées ;
+- vérification optionnelle par décodage complet audio/vidéo, sans modifier le fichier ;
+- alertes avant importation : codecs moins courants, couleurs 10 bits/4:2:2, cadence
+  potentiellement variable, conteneurs et sous-titres peu acceptés ;
+- bouton **« Pourquoi ce fichier ne fonctionne-t-il pas ? »** avec des explications
+  simples et des pistes de résolution, sans conversion automatique de l'original.
+
+La vérification complète peut prendre jusqu'à 10 minutes (analyse des métadonnées :
+60 secondes maximum). Un dépassement de délai est **indéterminé**, pas une preuve de
+corruption. Aucun outil ne peut garantir qu'un fichier lisible contient toute la fin
+attendue sans comparaison avec l'original. Les alertes de compatibilité sont générales,
+pas une certification pour une version précise d'un logiciel de montage.
+
+FFmpeg et FFprobe LGPL sont embarqués dans les distributions Windows. En développement,
+installez ces deux outils dans le PATH. Leurs processus n'accèdent qu'aux fichiers locaux.
+
 ---
 
 ## Compiler l'exécutable Windows (`OverLoad.exe`)
@@ -31,10 +52,11 @@ Chaque push déclenche automatiquement la compilation sur **GitHub Actions (`win
 - `OverLoad-Portable-win64.zip` — version portable isolée (`OverLoad-data\`) ;
 - `SHA256SUMS.txt` — empreintes SHA-256 vérifiables.
 
-Pour compiler `OverLoad.exe` en local sous Windows (Python 3.11+) :
+Pour compiler `OverLoad.exe` en local sous Windows (Python 3.11+ et GitHub CLI `gh`) :
 
 ```powershell
 python -m pip install -e ".[dev,build]"
+python scripts/prepare_ffmpeg.py
 python scripts/build_windows.py
 ```
 

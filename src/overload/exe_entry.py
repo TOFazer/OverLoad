@@ -33,6 +33,20 @@ def main(argv: list[str] | None = None) -> int:
 
         with tempfile.TemporaryDirectory(prefix="overload-selftest-") as tmp:
             tmp_dir = Path(tmp)
+            if getattr(sys, "frozen", False):
+                import wave
+
+                from overload.media.analyzer import analyze
+
+                sample = tmp_dir / "test audio.wav"
+                with wave.open(str(sample), "wb") as wav:
+                    wav.setnchannels(1)
+                    wav.setsampwidth(2)
+                    wav.setframerate(8000)
+                    wav.writeframes(b"\x00\x00" * 8000)
+                report = analyze(sample)
+                if "sans erreur" not in report.integrity:
+                    raise RuntimeError("Auto-test FFmpeg : " + report.explanation())
             code = launch_desktop_app(
                 destination_dir=tmp_dir / "Downloads",
                 data_dir=tmp_dir / "Data",
