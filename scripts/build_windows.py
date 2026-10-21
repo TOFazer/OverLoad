@@ -95,10 +95,26 @@ def _common_pyinstaller_args(icon_path: Path) -> list[str]:
     return cmd
 
 
+def ensure_media_tools() -> None:
+    """Prépare les outils aussi pour les builds lancés sans l'étape CI dédiée."""
+    required = (ROOT / "tools" / name for name in ("ffmpeg.exe", "ffprobe.exe"))
+    if all(path.is_file() for path in required):
+        return
+    sys.path.insert(0, str(ROOT / "scripts"))
+    from prepare_ffmpeg import prepare
+
+    prepare()
+    for name in ("ffmpeg.exe", "ffprobe.exe"):
+        if not (ROOT / "tools" / name).is_file():
+            raise RuntimeError(f"Préparation incomplète : {name} est absent.")
+
+
 def build_all() -> None:
     sys.path.insert(0, str(ROOT / "scripts"))
     from generate_icon import generate_ico
 
+    # Vérifier les dépendances avant de supprimer les livrables existants.
+    ensure_media_tools()
     icon = generate_ico()
     shutil.rmtree(DIST, ignore_errors=True)
     shutil.rmtree(BUILD, ignore_errors=True)
