@@ -113,17 +113,23 @@ class _PinnedHTTPHandler(urllib.request.HTTPHandler):
 
 class _PinnedHTTPSHandler(urllib.request.HTTPSHandler):
     def __init__(self, allow_private: bool) -> None:
-        super().__init__(context=ssl.create_default_context())
+        # Contexte SSL sécurisé par défaut : vérification du certificat et du nom d'hôte activée.
+        # ssl.create_default_context() fournit CERT_REQUIRED et check_hostname=True.
+        # On ne passe jamais check_hostname=False ni CERT_NONE afin de ne pas désactiver la sécurité.
+        ctx = ssl.create_default_context()
+        super().__init__(context=ctx)
         self._allow_private = allow_private
 
     def https_open(self, req):  # noqa: ANN001, ANN202
+        # Compatibilité Python 3.11 et 3.12+ : depuis Python 3.12, HTTPSHandler et
+        # HTTPSConnection n'ont plus le paramètre check_hostname (supprimé, il faut
+        # utiliser context.check_hostname). On ne transmet donc que le contexte.
         return self.do_open(
             lambda host, **kw: _PinnedHTTPSConnection(
                 host, allow_private=self._allow_private, **kw
             ),
             req,
             context=self._context,
-            check_hostname=self._check_hostname,
         )
 
 
