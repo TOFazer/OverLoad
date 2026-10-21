@@ -62,6 +62,11 @@ def _run(name: str, args: list[str], timeout: int) -> tuple[int, str, str]:
         )
 
 
+def run_tool(name: str, args: list[str], timeout: int = 120) -> tuple[int, str, str]:
+    """Exécute un outil FFmpeg/FFprobe embarqué (usage public : espace Créateurs)."""
+    return _run(name, args, timeout)
+
+
 def number(value: object) -> float | None:
     try:
         result = float(str(value))

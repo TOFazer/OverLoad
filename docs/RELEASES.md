@@ -43,7 +43,7 @@ Le workflow Pages ne déploie que `main`, pas les branches de développement.
 
 1. Intégrer les changements de l'application dans `main` et vérifier que la CI passe.
 2. Ouvrir **Releases → Draft a new release** sur GitHub.
-3. Créer un **nouveau tag** au format `v0.1.0`, puis `v0.1.1`, `v0.2.0`, etc.,
+3. Créer un **nouveau tag** au format `v1.0.1`, puis `v1.0.2`, `v1.1.0`, etc.,
    avec `main` comme cible. Le tag doit pointer sur du code contenant le workflow
    de publication ; une ancienne release antérieure à ce workflow ne l'exécute pas.
 4. Renseigner le titre et les notes. Pour une stable, ne pas cocher
@@ -67,10 +67,22 @@ OverLoad-Portable-win64.zip
 SHA256SUMS.txt
 ```
 
-Les téléchargements du site suivent alors cette nouvelle version. Les simples push
+Les téléchargements du site suivent alors cette nouvelle version. Les push de branches
 restent des builds de développement dans les artefacts Actions : ils ne remplacent
-pas la version publique. Aucun token personnel à configurer : seul le job de
-publication reçoit le droit `contents: write` via le jeton fourni par GitHub Actions.
+pas la version publique. Aucun token personnel à configurer : seuls les jobs qui
+publient reçoivent le droit `contents: write` via le jeton fourni par GitHub Actions.
+
+### Autre méthode : pousser un tag
+
+Le workflow **Release OverLoad.exe** permet aussi de publier depuis un push de tag
+`v*` pointant sur le code à distribuer. Il aligne les versions, lance les tests Python
+et du site, compile les fichiers Windows et crée la release avec ses fichiers.
+Un tag avec un suffixe `-alpha.N`, `-beta.N` ou `-rc.N` crée une préversion, pas une stable.
+
+Si la release existe déjà, ses fichiers sont mis à jour avec `--clobber`, ce qui
+permet de relancer un build interrompu. Les deux chemins de publication partagent
+un groupe de concurrence par tag : ils ne téléversent pas de fichiers en parallèle
+pour une même release.
 
 ### Avant la première release ou pendant une compilation
 

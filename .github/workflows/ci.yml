@@ -103,6 +103,9 @@ jobs:
     if: github.event_name == 'release'
     needs: [test-and-build-windows, test-site]
     runs-on: ubuntu-latest
+    concurrency:
+      group: release-${{ github.event.release.tag_name }}
+      cancel-in-progress: false
     permissions:
       contents: write
     steps:

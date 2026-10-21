@@ -2,7 +2,7 @@
 
 ⚡ **OverLoad** — Organise et prépare tes médias.
 
-🎬 Télécharge des fichiers depuis des adresses directes prises en charge, retrouve tes vidéos, musiques et images, analyse-les et convertis-les, directement dans une **application native Windows (`OverLoad.exe`)** sans dépendance à installer.
+🎬 Télécharge des fichiers depuis des adresses directes prises en charge, retrouve tes vidéos, musiques et images, analyse-les, prépare tes projets de montage et organise tes médias, directement dans une **application native Windows (`OverLoad.exe`)** sans dépendance à installer.
 
 **Sources prises en charge (version 1) :** adresses HTTP(S) qui pointent directement vers un fichier. OverLoad ne contourne ni les protections d'accès, ni les DRM, ni les restrictions d'une plateforme.
 
@@ -34,6 +34,20 @@ Pour mettre à jour une installation existante, fermez OverLoad et relancez le n
 - **Téléchargement par lots** depuis une liste de liens collée ou un fichier `.txt`.
 - **Historique persistant SQLite** (`library.db`) et bouton **Ouvrir / Rouvrir le dossier** sélectionnant directement le fichier dans l'Explorateur Windows (`explorer.exe /select,...`).
 - **Télémétrie temps réel** : vitesse réelle sur fenêtre glissante, temps restant estimé lissé et diagnostic des éventuels problèmes de connexion.
+
+## 🎬 Espace Créateurs
+
+L'onglet **Espace Créateurs** de l'application native rassemble tout le nécessaire pour préparer un projet vidéo sans risque pour vos fichiers d'origine :
+
+- **Préparer un dossier complet pour chaque projet vidéo** : arborescence propre (rushs, audio, images, sous-titres, projets, exports) créée en un clic, avec fichier `LISEZ-MOI.txt` et manifeste `overload-projet.json` rappelant les règles. Un dossier existant est enrichi, jamais vidé ni écrasé.
+- **Importer et organiser des médias destinés au montage** : les fichiers sont classés par type (vidéo, audio, image, sous-titres) dans les dossiers du profil choisi, avec un **plan détaillé avant toute copie**.
+- **Renommer des lots de fichiers avec des modèles personnalisés** : jetons `{projet}`, `{nom}`, `{origine}`, `{type}`, `{ext}`, `{date}`, `{annee}`, `{mois}`, `{jour}`, `{heure}` et `{numero}` (padding possible : `{numero:03}`), aperçu en direct, et jamais d'écrasement (suffixe « (2) », « (3) »… ou fichier laissé intact).
+- **Créer des sous-titres et gérer les pistes disponibles** : liste de toutes les pistes d'un média (langues, canaux, pistes par défaut/forcées), extraction d'une piste de sous-titres en `.srt` converti, extraction d'une piste audio en `.wav` PCM, et création d'un modèle `.srt` UTF-8 prêt à compléter. Le média source n'est jamais modifié.
+- **Exporter une liste des sources, codecs et caractéristiques des fichiers** : inventaire CSV (UTF-8 BOM, séparateur « ; », ouverture directe dans Excel) avec conteneur, codecs vidéo/audio, résolution, FPS, durée, nombre de pistes, taille et **adresse source du téléchargement** quand le fichier provient de l'historique OverLoad.
+- **Profils dédiés aux logiciels de montage** : profils intégrés **Adobe Premiere Pro**, **DaVinci Resolve**, **Final Cut Pro (Mac)**, **CapCut / débutant** et **Universel** (structure + formats d'importation recommandés), complétés par vos **profils personnalisés** persistants.
+- **Le mode « Préparer mon projet »** : rassemble des médias dispersés (fichiers ou dossiers entiers) dans une structure de dossiers propre, **sans déplacer ni écraser les originaux sans confirmation** — seules des copies sont créées, après validation du plan, et chaque destination existante est signalée comme conflit à trancher (ignorer ou copie « (2) »).
+
+Règles de sécurité appliquées partout dans l'espace Créateurs : vos fichiers d'origine ne sont **jamais déplacés, renommés, modifiés ou supprimés** ; aucune copie n'est effectuée sans confirmation explicite ; aucun fichier existant n'est jamais écrasé.
 
 ## Analyseur multimédia Windows
 
@@ -68,6 +82,9 @@ Chaque push déclenche automatiquement la compilation sur **GitHub Actions (`win
 
 La publication d'une **release GitHub** déclenche le même build sur son tag, avec sa version,
 puis joint automatiquement ces fichiers à la release après réussite des tests.
+Un push d'étiquette `v*` (par exemple `v1.0.1`) peut aussi déclencher le workflow
+**Release OverLoad.exe**, qui compile, teste et publie la release avec ces mêmes fichiers.
+Dans les deux cas, les versions du paquet et de l'installateur sont alignées sur le tag.
 Le site utilise les liens `releases/latest/download/…` : aucune URL à modifier pour les versions
 suivantes. Voir le [guide de publication](docs/RELEASES.md).
 
