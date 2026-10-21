@@ -1,4 +1,7 @@
 import socket
+import ssl
+import urllib.request
+from types import SimpleNamespace
 
 import pytest
 
@@ -79,3 +82,58 @@ def test_refused_resolution_never_opens_a_socket(monkeypatch, tmp_path):
     with pytest.raises(OverloadError):
         download_to("http://rebind.test/file.bin", tmp_path / "file.bin")
     assert list(tmp_path.iterdir()) == []
+
+
+def test_https_handler_uses_a_secure_context_without_check_hostname(monkeypatch):
+    """Régression v1.0.0 : `check_hostname` n'était plus accepté par
+    `HTTPSConnection` depuis Python 3.12 ; le contexte SSL porte déjà la
+    vérification du certificat et du nom d'hôte."""
+    handler = netguard._PinnedHTTPSHandler(allow_private=False)
+    assert handler._context.verify_mode == ssl.CERT_REQUIRED
+    assert handler._context.check_hostname is True
+
+    captured = {}
+
+    def fake_do_open(http_class, req, **kwargs):
+        captured["http_class"] = http_class
+        captured["kwargs"] = kwargs
+
+    monkeypatch.setattr(handler, "do_open", fake_do_open)
+    handler.https_open(urllib.request.Request("https://example.com/file.bin"))
+
+    assert set(captured["kwargs"]) == {"context"}
+    assert captured["kwargs"]["context"] is handler._context
+
+
+def test_https_connect_verifies_the_original_hostname(monkeypatch):
+    """Le certificat est vérifié contre le nom d'origine, jamais contre l'IP."""
+    resolved = []
+    wrapped = {}
+
+    def fake_resolve(host, port, *, allow_private):
+        resolved.append((host, port, allow_private))
+        return ["93.184.216.34"]
+
+    def wrap_socket(sock, server_hostname=None):
+        wrapped["server_hostname"] = server_hostname
+        wrapped["sock"] = sock
+        return "tls-socket"
+
+    context = SimpleNamespace(
+        verify_mode=ssl.CERT_REQUIRED,
+        check_hostname=True,
+        post_handshake_auth=None,
+        wrap_socket=wrap_socket,
+    )
+
+    monkeypatch.setattr(netguard, "resolve_checked", fake_resolve)
+    monkeypatch.setattr(netguard, "_connect_to", lambda *args: "raw-socket")
+
+    connection = netguard._PinnedHTTPSConnection(
+        "example.com", allow_private=False, context=context
+    )
+    connection.connect()
+
+    assert resolved == [("example.com", 443, False)]
+    assert wrapped == {"server_hostname": "example.com", "sock": "raw-socket"}
+    assert connection.sock == "tls-socket"

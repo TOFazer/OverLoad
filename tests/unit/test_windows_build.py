@@ -3,10 +3,13 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+import tomllib
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
+from overload import __version__
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "build_windows.py"
 spec = importlib.util.spec_from_file_location("windows_build", SCRIPT)
@@ -47,3 +50,13 @@ def test_incomplete_preparation_fails_early(tmp_path, monkeypatch):
     monkeypatch.setitem(sys.modules, "prepare_ffmpeg", SimpleNamespace(prepare=lambda: None))
     with pytest.raises(RuntimeError, match="ffmpeg.exe"):
         build.ensure_media_tools()
+
+
+def test_release_version_is_synchronised_everywhere():
+    """Le paquet, le pyproject et l'installateur Inno Setup doivent partager
+    la même version, sinon l'exécutable et la release publiée divergent."""
+    root = SCRIPT.parents[1]
+    pyproject = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+    installer = (root / "packaging" / "OverLoad.iss").read_text(encoding="utf-8")
+    assert pyproject["project"]["version"] == __version__
+    assert f'#define MyAppVersion "{__version__}"' in installer
