@@ -1,17 +1,23 @@
 # Licences des composants tiers
 
-OverLoad n'embarque actuellement aucune dépendance d'exécution (bibliothèque standard Python uniquement).
+## Composants embarqués (v0.2)
 
-Composants prévus, à ajouter ici avant leur intégration :
-
-| Composant | Rôle | Licence | Statut |
+| Composant | Rôle | Licence | Version testée |
 |---|---|---|---|
-| FFmpeg / ffprobe (build LGPL, sans `--enable-gpl` ni `--enable-nonfree`) | Analyse et conversion | LGPL v2.1+ | Prévu (Phase 5) |
-| PySide6 (Qt for Python) | Interface | LGPL v3 | Prévu (Phase 2) |
-| PyInstaller | Génération de l'exécutable | GPL v2 (ou ultérieure) avec exception « bootloader » | Prévu (Phase 2) — exception vérifiée sur le texte officiel, voir ci-dessous |
-| Inno Setup | Installateur | Licence Inno Setup | Prévu (Phase 2) |
+| Pillow | Miniatures d'images et placeholders | MIT (HPND pour certaines parties) | 10+ |
+| FFmpeg / ffprobe (build LGPL, sans `--enable-gpl` ni `--enable-nonfree`) | Miniatures vidéo et durée (optionnel, non embarqué par défaut) | LGPL v2.1+ | 6+ |
+| PySide6 (Qt for Python) | Interface | LGPL v3 | 6.6+ |
+| PyInstaller | Génération de l'exécutable | GPL v2 (ou ultérieure) avec exception « bootloader » | 6+ |
+| Inno Setup | Installateur | Licence Inno Setup | 6 |
 
-yt-dlp n'est pas intégré dans la version 1 (voir `docs/audit/PHASE0_AUDIT.md`, décision 2).
+`yt-dlp` n'est pas intégré dans la version 1 (voir `docs/audit/PHASE0_AUDIT.md`, décision 2).
+
+Composants de build/dev (non distribués) : `pytest` (MIT), `ruff` (MIT).
+
+## Détails LGPL
+
+- **FFmpeg LGPL** : distribué en binaire séparé (non lié statiquement), avec mention de licence et sources disponibles sur demande. Vérifier à chaque release : `ffmpeg -version` et `-buildconf` ne doivent pas contenir `--enable-gpl`.
+- **PySide6 LGPL v3** : l'utilisateur peut remplacer la bibliothèque (PySide6 reste un import dynamique). Mention de licence dans l'installateur.
 
 ## PyInstaller : exception « bootloader » (vérifiée)
 

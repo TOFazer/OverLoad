@@ -11,6 +11,10 @@ dist/
 
 # Données locales et médias : ne jamais commiter
 OverLoad-data/
+OverLoad-data-Beta/
+OverLoad-data-Dev/
+library.db
+thumbnails/
 *.part
 *.mp4
 *.mkv

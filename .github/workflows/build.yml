@@ -1,0 +1,36 @@
+name: Build
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-exe:
+    name: Build OverLoad.exe (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Installer dépendances
+        run: python -m pip install -e ".[build]"
+      - name: PyInstaller
+        run: pyinstaller overload.spec --noconfirm --clean
+      - name: Vérifier l'exe
+        run: |
+          dir dist
+          if (!(Test-Path "dist/OverLoad.exe")) { throw "OverLoad.exe manquant" }
+          $s = (Get-Item "dist/OverLoad.exe").Length / 1MB
+          Write-Host "OverLoad.exe : $s Mo"
+      - name: Artefact
+        uses: actions/upload-artifact@v7
+        with:
+          name: OverLoad-windows
+          path: dist/OverLoad.exe
+          if-no-files-found: error
