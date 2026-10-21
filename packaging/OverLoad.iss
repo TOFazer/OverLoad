@@ -1,7 +1,6 @@
 ; Script Inno Setup pour générer l'installateur Windows 11 OverLoad-Setup.exe
 #define MyAppName "OverLoad"
 #define MyAppVersion "1.0.0"
-#define MyAppNumericVersion "1.0.0.0"
 #define MyAppPublisher "TOFazer"
 #define MyAppURL "https://github.com/TOFazer/OverLoad"
 #define MyAppExeName "OverLoad.exe"
@@ -10,7 +9,6 @@
 AppId={{8D4F51B2-6C19-4C7A-A2B8-9F0E1D45A711}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
-VersionInfoVersion={#MyAppNumericVersion}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppName}
