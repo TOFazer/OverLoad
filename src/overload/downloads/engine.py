@@ -3,9 +3,10 @@
 Garanties :
 - le contenu est écrit dans « nom.part » puis renommé seulement après vérification ;
 - un fichier vide ou plus court que prévu n'est jamais déclaré terminé ;
-- une interruption laisse le « .part » pour une reprise (HTTP Range) ;
+- une interruption ou une mise en pause laisse le « .part » pour une reprise (HTTP Range) ;
 - un fichier existant n'est jamais écrasé ;
-- chaque redirection est validée à nouveau.
+- chaque redirection est validée à nouveau ;
+- le débit respecte le limiteur global s'il est fourni.
 """
 
 from __future__ import annotations
@@ -20,17 +21,24 @@ from collections.abc import Callable
 from pathlib import Path
 
 from overload.core.errors import OverloadError
+from overload.downloads.bandwidth import BandwidthLimiter
 from overload.downloads.netguard import pinned_handlers
+from overload.downloads.telemetry import ConnectionIssue, IssueKind
 from overload.downloads.urls import ALLOWED_SCHEMES, validate_direct_url
 
 CHUNK_SIZE = 64 * 1024
 USER_AGENT = "OverLoad/0.1 (+https://github.com/TOFazer/OverLoad)"
 
 ProgressCallback = Callable[[int, int | None], None]
+IssueCallback = Callable[[ConnectionIssue], None]
 
 
 class DownloadCancelled(OverloadError):
     """L'utilisateur a annulé le téléchargement ; le .part est supprimé."""
+
+
+class DownloadPaused(OverloadError):
+    """L'utilisateur a mis le téléchargement en pause ; le .part est conservé sur disque."""
 
 
 class _ValidatingRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -48,7 +56,7 @@ class _ValidatingRedirectHandler(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-def _open(url: str, *, offset: int, allow_private_hosts: bool):  # noqa: ANN202
+def _open(url: str, *, offset: int, allow_private_hosts: bool, timeout: float = 30.0):  # noqa: ANN202
     headers = {"User-Agent": USER_AGENT}
     if offset > 0:
         headers["Range"] = f"bytes={offset}-"
@@ -56,7 +64,50 @@ def _open(url: str, *, offset: int, allow_private_hosts: bool):  # noqa: ANN202
         *pinned_handlers(allow_private_hosts),
         _ValidatingRedirectHandler(allow_private_hosts),
     )
-    return opener.open(urllib.request.Request(url, headers=headers), timeout=30)
+    return opener.open(urllib.request.Request(url, headers=headers), timeout=timeout)
+
+
+def _open_with_translation(
+    clean_url: str,
+    *,
+    part: Path,
+    offset: int,
+    allow_private_hosts: bool,
+    timeout: float,
+):  # noqa: ANN202
+    try:
+        return _open(
+            clean_url,
+            offset=offset,
+            allow_private_hosts=allow_private_hosts,
+            timeout=timeout,
+        ), offset
+    except urllib.error.HTTPError as exc:
+        if exc.code == 416 and offset > 0:
+            # Le .part est déjà complet ou invalide : on repart de zéro.
+            part.unlink(missing_ok=True)
+            try:
+                return _open(
+                    clean_url,
+                    offset=0,
+                    allow_private_hosts=allow_private_hosts,
+                    timeout=timeout,
+                ), 0
+            except urllib.error.HTTPError as retry_http_exc:
+                raise _http_error(retry_http_exc) from retry_http_exc
+            except (urllib.error.URLError, TimeoutError, OSError) as retry_net_exc:
+                raise OverloadError(
+                    "Connexion impossible ou interrompue.",
+                    str(getattr(retry_net_exc, "reason", retry_net_exc)),
+                    "Vérifiez votre connexion puis relancez le téléchargement.",
+                ) from retry_net_exc
+        raise _http_error(exc) from exc
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise OverloadError(
+            "Connexion impossible ou interrompue.",
+            str(getattr(exc, "reason", exc)),
+            "Vérifiez votre connexion puis relancez le téléchargement.",
+        ) from exc
 
 
 def download_to(
@@ -67,6 +118,10 @@ def download_to(
     allow_private_hosts: bool = False,
     progress: ProgressCallback | None = None,
     cancel_event: threading.Event | None = None,
+    pause_event: threading.Event | None = None,
+    bandwidth_limiter: BandwidthLimiter | None = None,
+    on_issue: IssueCallback | None = None,
+    timeout: float = 30.0,
 ) -> Path:
     """Télécharge `url` vers `target` (chemin choisi via plan_destination).
 
@@ -89,34 +144,44 @@ def download_to(
             "Choisissez un autre dossier dans les paramètres.",
         )
 
-    offset = part.stat().st_size if part.exists() else 0
-    try:
-        response = _open(clean_url, offset=offset, allow_private_hosts=allow_private_hosts)
-    except urllib.error.HTTPError as exc:
-        if exc.code == 416 and offset > 0:
-            # Le .part est déjà complet ou invalide : on repart de zéro.
-            part.unlink(missing_ok=True)
-            offset = 0
-            response = _open(clean_url, offset=0, allow_private_hosts=allow_private_hosts)
-        else:
-            raise _http_error(exc) from exc
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        raise OverloadError(
-            "Connexion impossible ou interrompue.",
-            str(getattr(exc, "reason", exc)),
-            "Vérifiez votre connexion puis relancez le téléchargement.",
-        ) from exc
+    if cancel_event is not None and cancel_event.is_set():
+        part.unlink(missing_ok=True)
+        raise DownloadCancelled("Téléchargement annulé.")
+    if pause_event is not None and pause_event.is_set():
+        raise DownloadPaused("Téléchargement mis en pause.")
+
+    initial_offset = part.stat().st_size if part.exists() else 0
+    response, offset = _open_with_translation(
+        clean_url,
+        part=part,
+        offset=initial_offset,
+        allow_private_hosts=allow_private_hosts,
+        timeout=timeout,
+    )
 
     with response:
         status = getattr(response, "status", 200)
         if offset > 0 and status != 206:
-            # Le serveur ignore Range : on recommence proprement.
+            # Le serveur ignore Range : on recommence proprement en prévenant l'utilisateur.
             offset = 0
+            if on_issue is not None:
+                on_issue(
+                    ConnectionIssue(
+                        kind=IssueKind.RANGE_UNSUPPORTED,
+                        message=(
+                            "Ce serveur ne prend pas en charge la reprise partielle : "
+                            "le téléchargement repart du début."
+                        ),
+                        recoverable=True,
+                    )
+                )
         length_header = response.headers.get("Content-Length")
         remaining = int(length_header) if length_header and length_header.isdigit() else None
         total = (offset + remaining) if remaining is not None else expected_size
         mode = "ab" if offset > 0 else "wb"
         received = offset
+        if offset > 0 and progress is not None:
+            progress(received, total)
 
         with part.open(mode) as handle:
             while True:
@@ -124,14 +189,45 @@ def download_to(
                     handle.close()
                     part.unlink(missing_ok=True)
                     raise DownloadCancelled("Téléchargement annulé.")
+                if pause_event is not None and pause_event.is_set():
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                    raise DownloadPaused("Téléchargement mis en pause.")
+
+                slice_size = (
+                    bandwidth_limiter.recommended_chunk_size(CHUNK_SIZE)
+                    if bandwidth_limiter is not None
+                    else CHUNK_SIZE
+                )
+                if bandwidth_limiter is not None:
+                    interrupted = bandwidth_limiter.acquire(
+                        slice_size,
+                        cancel_event=cancel_event,
+                        pause_event=pause_event,
+                    )
+                    if interrupted == "cancelled":
+                        handle.close()
+                        part.unlink(missing_ok=True)
+                        raise DownloadCancelled("Téléchargement annulé.")
+                    if interrupted == "paused":
+                        handle.flush()
+                        os.fsync(handle.fileno())
+                        raise DownloadPaused("Téléchargement mis en pause.")
+
                 try:
-                    chunk = response.read(CHUNK_SIZE)
+                    chunk = response.read(slice_size)
                 except (OSError, http.client.HTTPException) as exc:
+                    if bandwidth_limiter is not None:
+                        bandwidth_limiter.refund(slice_size)
                     raise OverloadError(
                         "Téléchargement interrompu.",
                         "la connexion a été coupée ; le fichier partiel est conservé pour reprise.",
                         "Relancez le téléchargement pour reprendre là où il s'est arrêté.",
                     ) from exc
+
+                if bandwidth_limiter is not None and len(chunk) < slice_size:
+                    bandwidth_limiter.refund(slice_size - len(chunk))
+
                 if not chunk:
                     break
                 try:
