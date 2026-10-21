@@ -4,6 +4,8 @@ on:
   push:
     branches: ["**"]
   pull_request:
+  release:
+    types: [published]
 
 permissions:
   contents: read
@@ -15,12 +17,18 @@ jobs:
     env:
       QT_QPA_PLATFORM: offscreen
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: "pip"
+
+      - name: Utiliser la version du tag pour le paquet et l'installateur
+        if: github.event_name == 'release'
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: python scripts/set_release_version.py "$env:RELEASE_TAG"
 
       - name: Installer le projet, les outils de test et PyInstaller
         run: python -m pip install -e ".[dev,build]"
@@ -70,7 +78,7 @@ jobs:
           Get-Content dist\SHA256SUMS.txt
 
       - name: Publier les exécutables Windows (OverLoad.exe & OverLoad-Setup.exe)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: OverLoad-Windows-x64
           path: |
@@ -79,3 +87,47 @@ jobs:
             dist/OverLoad-Portable-win64.zip
             dist/SHA256SUMS.txt
           if-no-files-found: error
+
+  test-site:
+    name: Tests du site de téléchargement
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - run: node --test tests/web/releases.test.mjs
+
+  publish-release:
+    name: Joindre les fichiers Windows à la release
+    if: github.event_name == 'release'
+    needs: [test-and-build-windows, test-site]
+    runs-on: ubuntu-latest
+    concurrency:
+      group: release-${{ github.event.release.tag_name }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - name: Récupérer les fichiers compilés et testés pour ce tag
+        uses: actions/download-artifact@v8
+        with:
+          name: OverLoad-Windows-x64
+          path: dist
+
+      - name: Vérifier les empreintes des fichiers à publier
+        working-directory: dist
+        run: sha256sum --check SHA256SUMS.txt
+
+      - name: Publier les fichiers sous des noms permanents
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          gh release upload "$RELEASE_TAG" \
+            dist/OverLoad.exe \
+            dist/OverLoad-Setup.exe \
+            dist/OverLoad-Portable-win64.zip \
+            dist/SHA256SUMS.txt \
+            --clobber
