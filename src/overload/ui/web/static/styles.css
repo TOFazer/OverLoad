@@ -1,53 +1,56 @@
-/* OverX Forest (OverLoad) : sapin, charbon, mousse, sauge, crème. */
+/* Identité OverLoad v2.0 : fond #101713, panneaux #1A261F, vert forêt #315E43,
+   vert sauge #A9C7AE — la même que l'application native (voir docs/DESIGN.md). */
 :root,
 [data-theme="dark"] {
-  --bg-canvas: #14251b;
-  --bg-surface: #202722;
-  --bg-elevated: #28312b;
-  --bg-input: #16241b;
-  --border-subtle: rgba(168, 191, 165, 0.16);
-  --border-strong: rgba(168, 191, 165, 0.34);
-  --text-primary: #e8ede5;
-  --text-secondary: #a8bfa5;
-  --text-muted: #8aa08d;
-  --accent: #52765b;
-  --accent-hover: #68896e;
+  --bg-canvas: #101713;
+  --bg-surface: #1a261f;
+  --bg-elevated: #223129;
+  --bg-input: #131c16;
+  --border-subtle: rgba(169, 199, 174, 0.16);
+  --border-strong: rgba(169, 199, 174, 0.34);
+  --text-primary: #eaf1e8;
+  --text-secondary: #a9c7ae;
+  --text-muted: #7f9784;
+  --accent: #315e43;
+  --accent-hover: #3f7454;
+  --accent-text: #a9c7ae;
   --accent-ink: #ffffff;
-  --accent-soft: rgba(82, 118, 91, 0.22);
-  --ok: #86b98a;
-  --ok-soft: rgba(134, 185, 138, 0.14);
-  --info: #8fb8c4;
-  --info-soft: rgba(143, 184, 196, 0.14);
-  --warn: #d9b36a;
-  --warn-soft: rgba(217, 179, 106, 0.14);
-  --danger: #e38b7d;
-  --danger-soft: rgba(227, 139, 125, 0.14);
+  --accent-soft: rgba(169, 199, 174, 0.14);
+  --ok: #7fc98f;
+  --ok-soft: rgba(127, 201, 143, 0.14);
+  --info: #93bfd0;
+  --info-soft: rgba(147, 191, 208, 0.14);
+  --warn: #e0b96b;
+  --warn-soft: rgba(224, 185, 107, 0.14);
+  --danger: #e88e7b;
+  --danger-soft: rgba(232, 142, 123, 0.14);
   --shadow-card: 0 18px 44px rgba(0, 0, 0, 0.42);
 }
 
 [data-theme="light"] {
-  --bg-canvas: #edf2ea;
+  --bg-canvas: #eef3eb;
   --bg-surface: #fcfdf9;
-  --bg-elevated: #eef4e9;
+  --bg-elevated: #edf3e6;
   --bg-input: #ffffff;
-  --border-subtle: rgba(20, 37, 27, 0.12);
-  --border-strong: rgba(20, 37, 27, 0.26);
-  --text-primary: #14251b;
-  --text-secondary: #3f5747;
-  --text-muted: #667a6b;
-  --accent: #244a35;
-  --accent-hover: #52765b;
+  --border-subtle: rgba(16, 23, 19, 0.12);
+  --border-strong: rgba(16, 23, 19, 0.26);
+  --text-primary: #101713;
+  --text-secondary: #365341;
+  --text-muted: #5f7765;
+  --accent: #315e43;
+  --accent-hover: #3f7454;
+  --accent-text: #315e43;
   --accent-ink: #ffffff;
-  --accent-soft: rgba(36, 74, 53, 0.1);
-  --ok: #2e7d4f;
-  --ok-soft: rgba(46, 125, 79, 0.12);
-  --info: #2f6b7a;
-  --info-soft: rgba(47, 107, 122, 0.12);
-  --warn: #96690f;
-  --warn-soft: rgba(150, 105, 15, 0.12);
-  --danger: #b23a2c;
-  --danger-soft: rgba(178, 58, 44, 0.11);
-  --shadow-card: 0 8px 24px rgba(20, 37, 27, 0.1);
+  --accent-soft: rgba(49, 94, 67, 0.1);
+  --ok: #2f7d4a;
+  --ok-soft: rgba(47, 125, 74, 0.12);
+  --info: #2c6577;
+  --info-soft: rgba(44, 101, 119, 0.12);
+  --warn: #8f640e;
+  --warn-soft: rgba(143, 100, 14, 0.12);
+  --danger: #ae3727;
+  --danger-soft: rgba(174, 55, 39, 0.11);
+  --shadow-card: 0 8px 24px rgba(16, 23, 19, 0.1);
 }
 
 *,
@@ -131,7 +134,7 @@ body {
   padding: 2px 7px;
   border-radius: 999px;
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .brand-subtitle {
@@ -203,7 +206,7 @@ body {
 
 .sparkline-line {
   fill: none;
-  stroke: var(--accent);
+  stroke: var(--accent-text);
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;

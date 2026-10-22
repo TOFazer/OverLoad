@@ -48,6 +48,8 @@ HIDDEN_IMPORTS = [
     "overload.downloads.urls",
     "overload.downloads.youtube",
     "overload.history.store",
+    "overload.library",
+    "overload.library.scan",
     "overload.media.analyzer",
     "overload.settings.store",
     "overload.ui.analyzer",

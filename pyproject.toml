@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "overload"
-version = "1.3.0"
-description = "OverLoad — outils multimédias pour Windows (téléchargement, bibliothèque, analyse, conversion)."
+version = "2.0.0"
+description = "OverLoad — Media Manager pour Windows (téléchargements, bibliothèque, espace Créateurs)."
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"

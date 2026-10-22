@@ -191,6 +191,13 @@ def create_creators_widget(
         card.setObjectName("panelCard")
         return card
 
+    def _intro(layout: QVBoxLayout, text: str) -> None:
+        """Explication affichée en tête de chaque outil : utilité, entrées, effet."""
+        label = QLabel(text)
+        label.setObjectName("mutedLabel")
+        label.setWordWrap(True)
+        layout.addWidget(label)
+
     # ------------------------------------------------------------------
     # 1. Mes projets
     # ------------------------------------------------------------------
@@ -200,6 +207,12 @@ def create_creators_widget(
         layout.setContentsMargins(4, 6, 4, 4)
         layout.setSpacing(10)
 
+        _intro(
+            layout,
+            "Créez l'arborescence complète d'un projet vidéo (rushs, audio, images, "
+            "sous-titres, exports…) adaptée à votre logiciel de montage. Un dossier "
+            "existant est complété, jamais vidé ni écrasé.",
+        )
         form_card = _card()
         form_layout = QVBoxLayout(form_card)
         form_layout.setContentsMargins(12, 10, 12, 10)
@@ -410,10 +423,17 @@ def create_creators_widget(
         layout.setContentsMargins(4, 6, 4, 4)
         layout.setSpacing(10)
 
+        _intro(
+            layout,
+            "Rassemblez des médias dispersés (fichiers ou dossiers entiers : vidéos, "
+            "audios, images, sous-titres) dans un projet rangé par type. Vous validez "
+            "d'abord un plan détaillé ; seules des COPIES sont créées, vos originaux "
+            "ne bougent pas et rien n'est écrasé.",
+        )
         sources_card = _card()
         sources_layout = QVBoxLayout(sources_card)
         sources_layout.setContentsMargins(12, 10, 12, 10)
-        src_title = QLabel("1⃣ Vos médias d'origine (fichiers ou dossiers entiers)")
+        src_title = QLabel("Étape 1 — Vos médias d'origine (fichiers ou dossiers entiers)")
         src_title.setObjectName("sectionTitle")
         sources_layout.addWidget(src_title)
         sources_edit = QPlainTextEdit()
@@ -724,6 +744,13 @@ def create_creators_widget(
         layout.setContentsMargins(4, 6, 4, 4)
         layout.setSpacing(10)
 
+        _intro(
+            layout,
+            "Renommez des copies de vos fichiers selon un modèle ({projet}, {nom}, "
+            "{date}, {numero}…), avec aperçu en direct avant toute écriture. "
+            "Les originaux ne sont jamais renommés et un nom déjà pris n'est "
+            "jamais écrasé (suffixe « (2) », « (3) »…).",
+        )
         sources_card = _card()
         sources_layout = QVBoxLayout(sources_card)
         sources_layout.setContentsMargins(12, 10, 12, 10)
@@ -917,6 +944,13 @@ def create_creators_widget(
         layout.setContentsMargins(4, 6, 4, 4)
         layout.setSpacing(10)
 
+        _intro(
+            layout,
+            "Listez toutes les pistes d'une vidéo ou d'un audio (langues, canaux, "
+            "pistes par défaut/forcées), extrayez un sous-titre en .srt ou une piste "
+            "audio en .wav, ou créez un modèle .srt à compléter. Le fichier source "
+            "n'est jamais modifié.",
+        )
         media_card = _card()
         media_layout = QVBoxLayout(media_card)
         media_layout.setContentsMargins(12, 10, 12, 10)
@@ -1160,6 +1194,13 @@ def create_creators_widget(
         layout.setContentsMargins(4, 6, 4, 4)
         layout.setSpacing(10)
 
+        _intro(
+            layout,
+            "Inventoriez un dossier de médias (formats, codecs, résolution, durée, "
+            "pistes) et exportez le résultat en CSV ouvrable dans Excel — avec, quand "
+            "elle est connue, l'adresse source du téléchargement. Analyse en lecture "
+            "seule : aucun fichier n'est modifié.",
+        )
         top_card = _card()
         top_layout = QVBoxLayout(top_card)
         top_layout.setContentsMargins(12, 10, 12, 10)
@@ -1540,12 +1581,37 @@ def create_creators_widget(
 
     page_refreshers: dict[int, Callable[[], None]] = {}
 
-    tabs.addTab(build_projects_page(), "Mes projets")
-    tabs.addTab(build_prepare_page(), "Préparer mon projet")
-    tabs.addTab(build_rename_page(), "Renommer par lots")
-    tabs.addTab(build_tracks_page(), "Sous-titres et pistes")
-    tabs.addTab(build_inventory_page(), "Inventaire et export")
-    tabs.addTab(build_profiles_page(), "Profils de montage")
+    from overload.ui.analyzer import create_analyzer_widget
+
+    analyzer_widget = create_analyzer_widget()
+    analyzer_page = QWidget()
+    analyzer_layout = QVBoxLayout(analyzer_page)
+    analyzer_layout.setContentsMargins(8, 8, 8, 8)
+    analyzer_layout.addWidget(analyzer_widget)
+
+    tool_indexes: dict[str, int] = {}
+
+    def _add_tool(key: str, page: QWidget, label: str) -> None:
+        tool_indexes[key] = tabs.addTab(page, label)
+
+    _add_tool("projects", build_projects_page(), "Mes projets")
+    _add_tool("prepare", build_prepare_page(), "Préparer mon projet")
+    _add_tool("analyze", analyzer_page, "Analyse")
+    _add_tool("rename", build_rename_page(), "Renommer par lots")
+    _add_tool("tracks", build_tracks_page(), "Sous-titres")
+    _add_tool("inventory", build_inventory_page(), "Inventaire")
+    _add_tool("profiles", build_profiles_page(), "Profils")
+
+    def show_tool(key: str) -> None:
+        """Affiche l'outil demandé (« premiere » ouvre l'analyse de compatibilité)."""
+        index = tool_indexes.get("analyze" if key == "premiere" else key)
+        if index is not None:
+            tabs.setCurrentIndex(index)
+
+    widget.tabs = tabs  # type: ignore[attr-defined]
+    widget.analyzer = analyzer_widget  # type: ignore[attr-defined]
+    widget.show_tool = show_tool  # type: ignore[attr-defined]
+    widget.tool_keys = tuple(tool_indexes)  # type: ignore[attr-defined]
 
     def _on_tab_changed(index: int) -> None:
         refresher = page_refreshers.get(index)

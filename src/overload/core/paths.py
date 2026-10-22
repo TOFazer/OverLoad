@@ -150,3 +150,42 @@ def open_folder(path: Path | str, *, opener=None) -> Path:  # noqa: ANN001
         ) from exc
 
     return folder
+
+
+def open_file(path: Path | str, *, opener=None) -> Path:  # noqa: ANN001
+    """Ouvre un fichier avec l'application par défaut du système.
+
+    Contrairement à `open_folder` (qui révèle le fichier dans l'Explorateur),
+    `open_file` lance le fichier lui-même : lecteur vidéo, visionneuse
+    d'images, etc. Lève `OverloadError` si le fichier n'existe plus.
+    """
+    target = Path(path).expanduser()
+    if not target.is_file():
+        raise OverloadError(
+            "Impossible d'ouvrir le fichier.",
+            f"le fichier « {target} » est introuvable.",
+            "Vérifiez qu'il n'a pas été déplacé, renommé ou supprimé depuis "
+            "le téléchargement.",
+        )
+    resolved = target.resolve()
+    if opener is not None:
+        opener(resolved, select_file=False)
+        return resolved
+    try:
+        if sys.platform == "win32":
+            os.startfile(str(resolved))  # type: ignore[attr-defined]
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", str(resolved)])
+        else:
+            subprocess.Popen(
+                ["xdg-open", str(resolved)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+    except OSError as exc:
+        raise OverloadError(
+            "Impossible d'ouvrir le fichier.",
+            str(exc),
+            f"Vous pouvez l'ouvrir manuellement depuis son dossier : {resolved.parent}",
+        ) from exc
+    return resolved

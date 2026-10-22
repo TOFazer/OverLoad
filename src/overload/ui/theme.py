@@ -1,12 +1,16 @@
 """Système de design d'OverLoad : palettes, typographie et feuilles de style Qt.
 
-L'interface native suit l'identité « OverX Forest » : forêt de nuit, vert sapin
-profond, charbon, vert mousse et vert sauge, texte crème naturel. C'est l'accent
-par défaut ; les autres accents restent personnalisables sans changer le socle
-forestier des fonds. Typographie Manrope / Inter si disponible, sinon Segoe UI
-Variable sur Windows. Toutes les valeurs sont centralisées ici afin que les
-composants dessinés à la main (barres de progression, vignettes, icônes) et les
-feuilles de style QSS restent parfaitement cohérents.
+Depuis la v2.0, l'identité d'OverLoad est un vert-noir profond pensé pour un
+usage prolongé : fond `#101713`, panneaux `#1A261F`, vert forêt `#315E43` pour
+les actions principales et les éléments sélectionnés, vert sauge `#A9C7AE` pour
+les détails lumineux. Les couleurs d'état (succès, avertissement, erreur,
+information) restent distinctes de l'accent pour ne jamais confondre
+« en cours », « terminé » et « problème ». C'est l'accent par défaut ; les
+autres accents restent personnalisables sans changer le socle forestier des
+fonds. Typographie Manrope / Inter si disponible, sinon Segoe UI Variable sur
+Windows. Toutes les valeurs sont centralisées ici afin que les composants
+dessinés à la main (barres de progression, vignettes, icônes) et les feuilles
+de style QSS restent parfaitement cohérents.
 """
 
 from __future__ import annotations
@@ -18,14 +22,19 @@ from pathlib import Path
 
 DEFAULT_ACCENT = "forest"
 
-# Identité « OverX Forest » (OverLoad uniquement) : forêt de nuit, naturelle et
-# premium — aucun vert fluo. Ces constantes sont la référence de la palette.
-FOREST_PINE = "#14251B"  # vert sapin — fond principal (sombre)
-FOREST_BRAND = "#244A35"  # vert forêt — couleur de marque
-FOREST_MOSS = "#52765B"  # vert mousse — boutons et éléments actifs
-FOREST_SAGE = "#A8BFA5"  # vert sauge — détails, texte secondaire (sombre)
-FOREST_CREAM = "#E8EDE5"  # crème naturel — texte principal (sombre)
-FOREST_CHARCOAL = "#202722"  # charbon — cartes et panneaux (sombre)
+# Identité OverLoad v2.0 : sombre, élégante, vert forêt naturel — aucun vert
+# fluo. Ces quatre constantes sont LA référence de l'identité ; les autres
+# teintes en sont dérivées (surfaces, bordures, états de survol).
+FOREST_NIGHT = "#101713"  # fond principal — vert-noir profond
+FOREST_PANEL = "#1A261F"  # panneaux — navigation, zones de contenu, menus
+FOREST_BRAND = "#315E43"  # vert forêt — actions principales, sélection, boutons
+FOREST_SAGE = "#A9C7AE"  # vert sauge — détails lumineux, accents graphiques
+FOREST_CREAM = "#EAF1E8"  # crème naturel — texte principal (sombre)
+FOREST_MOSS = "#4E7D60"  # dérivé plus clair du vert forêt (dégradés, illustration)
+
+# Alias historiques (v1.3) conservés pour les imports existants.
+FOREST_PINE = FOREST_NIGHT
+FOREST_CHARCOAL = FOREST_PANEL
 
 
 @dataclass(frozen=True)
@@ -59,15 +68,16 @@ class Accent:
 ACCENTS: dict[str, Accent] = {
     "forest": Accent(
         key="forest",
-        label="Forêt (OverX)",
-        # Sombre : mousse pour les boutons (blanc lisible dessus), forêt au repos.
-        dark=FOREST_MOSS,
-        dark_hover="#68896E",
-        dark_pressed=FOREST_BRAND,
-        # Clair : forêt en bouton, sapin une fois pressé, mousse au survol.
+        label="Vert forêt",
+        # Le vert forêt #315E43 porte les surfaces d'action (boutons,
+        # progression, sélection) ; le texte d'accent passe par le vert sauge
+        # en thème sombre pour rester lisible (voir `accent_text`).
+        dark=FOREST_BRAND,
+        dark_hover="#3F7454",
+        dark_pressed="#264A35",
         light=FOREST_BRAND,
-        light_hover=FOREST_MOSS,
-        light_pressed=FOREST_PINE,
+        light_hover="#3F7454",
+        light_pressed="#1F3D2B",
     ),
     "violet": Accent(
         key="violet",
@@ -161,6 +171,7 @@ class Palette:
     accent: str
     accent_hover: str
     accent_pressed: str
+    accent_text: str
     accent_ink: str
     accent_soft: str
     accent_softer: str
@@ -197,72 +208,79 @@ def palette(theme: str = "dark", accent: str = DEFAULT_ACCENT) -> Palette:
     hover = accent_def.hover(theme)
     pressed = accent_def.pressed(theme)
     if theme == "light":
-        # Clair « jour en forêt » : crème et sauge pâle, texte sapin.
+        # Clair « jour en forêt » : crème et sauge pâle, texte vert-noir.
+        # Sur fond clair, le vert forêt sert aussi de texte d'accent.
         return Palette(
             theme=theme,
             accent_key=accent_def.key,
-            canvas="#EDF2EA",
-            canvas_soft="#E3EBDE",
-            sidebar="#F7FAF3",
+            canvas="#EEF3EB",
+            canvas_soft="#E2EBDD",
+            sidebar="#F6F9F3",
             surface="#FCFDF9",
-            surface_alt="#EEF4E9",
-            surface_hover="#E2EDDA",
+            surface_alt="#EDF3E6",
+            surface_hover="#DFEBD8",
             input="#FFFFFF",
-            input_focus="#F4F9F0",
-            border="#CFDCC8",
-            border_strong="#A7BB9C",
-            text=FOREST_PINE,
-            text_secondary="#3F5747",
-            text_muted="#667A6B",
+            input_focus="#F2F8EE",
+            border="#C9D8C0",
+            border_strong="#9DB894",
+            text=FOREST_NIGHT,
+            text_secondary="#365341",
+            text_muted="#5F7765",
             accent=base,
             accent_hover=hover,
             accent_pressed=pressed,
+            accent_text=base,
             accent_ink=accent_def.ink,
             accent_soft=_rgba(base, 0.10),
             accent_softer=_rgba(base, 0.055),
-            info="#2F6B7A",
-            info_soft="rgba(47, 107, 122, 0.10)",
-            success="#2E7D4F",
-            success_soft="rgba(46, 125, 79, 0.10)",
-            warning="#96690F",
-            warning_soft="rgba(150, 105, 15, 0.10)",
-            danger="#B23A2C",
-            danger_soft="rgba(178, 58, 44, 0.09)",
+            info="#2C6577",
+            info_soft="rgba(44, 101, 119, 0.10)",
+            success="#2F7D4A",
+            success_soft="rgba(47, 125, 74, 0.10)",
+            warning="#8F640E",
+            warning_soft="rgba(143, 100, 14, 0.10)",
+            danger="#AE3727",
+            danger_soft="rgba(174, 55, 39, 0.09)",
             overlay="rgba(252, 253, 249, 0.92)",
         )
-    # Sombre « forêt de nuit » : sapin et charbon d'abord, mousse en action,
-    # sauge en détail, crème en texte.
+    # Sombre : fond vert-noir #101713, panneaux #1A261F, vert forêt #315E43 en
+    # action, vert sauge #A9C7AE en détail et en texte d'accent, crème en
+    # texte. États volontairement distincts : succès plus lumineux que la
+    # sauge, ambre pour les avertissements, terracotta pour les erreurs,
+    # bleu-gris pour l'information / pause.
+    accent_text = FOREST_SAGE if accent_def.key == "forest" else base
     return Palette(
         theme=theme,
         accent_key=accent_def.key,
-        canvas=FOREST_PINE,
-        canvas_soft="#0E1B13",
-        sidebar="#0E1B13",
-        surface=FOREST_CHARCOAL,
-        surface_alt="#28312B",
-        surface_hover="#323E35",
-        input="#16241B",
-        input_focus="#1B2E22",
-        border="#2D3D33",
-        border_strong="#485C4E",
+        canvas=FOREST_NIGHT,
+        canvas_soft="#0B100D",
+        sidebar="#0B100D",
+        surface=FOREST_PANEL,
+        surface_alt="#223129",
+        surface_hover="#2C4034",
+        input="#131C16",
+        input_focus="#18271D",
+        border="#2B3E32",
+        border_strong="#46604F",
         text=FOREST_CREAM,
         text_secondary=FOREST_SAGE,
-        text_muted="#8AA08D",
+        text_muted="#7F9784",
         accent=base,
         accent_hover=hover,
         accent_pressed=pressed,
+        accent_text=accent_text,
         accent_ink=accent_def.ink,
-        accent_soft=_rgba(base, 0.18),
-        accent_softer=_rgba(base, 0.09),
-        info="#8FB8C4",
-        info_soft="rgba(143, 184, 196, 0.13)",
-        success="#86B98A",
-        success_soft="rgba(134, 185, 138, 0.13)",
-        warning="#D9B36A",
-        warning_soft="rgba(217, 179, 106, 0.13)",
-        danger="#E38B7D",
-        danger_soft="rgba(227, 139, 125, 0.13)",
-        overlay="rgba(14, 27, 19, 0.88)",
+        accent_soft=_rgba(accent_text, 0.14),
+        accent_softer=_rgba(accent_text, 0.07),
+        info="#93BFD0",
+        info_soft="rgba(147, 191, 208, 0.13)",
+        success="#7FC98F",
+        success_soft="rgba(127, 201, 143, 0.13)",
+        warning="#E0B96B",
+        warning_soft="rgba(224, 185, 107, 0.13)",
+        danger="#E88E7B",
+        danger_soft="rgba(232, 142, 123, 0.13)",
+        overlay="rgba(11, 16, 13, 0.88)",
     )
 
 
@@ -511,6 +529,25 @@ def build_stylesheet(
         background-image: qlineargradient(x1:0, y1:1, x2:1, y2:0,
             stop:0 {p.surface}, stop:1 {p.accent_softer});
     }}
+    QFrame#stepCard {{
+        background-color: {p.surface_alt};
+        border: 1px solid {p.border};
+        border-radius: {s(13)}px;
+    }}
+    QPushButton#toolCard {{
+        background-color: {p.surface};
+        border: 1px solid {p.border};
+        border-radius: {s(14)}px;
+        padding: 0px;
+        text-align: left;
+    }}
+    QPushButton#toolCard:hover {{
+        background-color: {p.surface_alt};
+        border: 1px solid {_rgba(p.accent_text, 0.6)};
+    }}
+    QPushButton#toolCard:pressed {{
+        background-color: {p.accent_softer};
+    }}
     QFrame#segmented {{
         background-color: {p.input};
         border: 1px solid {p.border};
@@ -567,6 +604,36 @@ def build_stylesheet(
     QLabel#heroSubtitle {{
         color: {p.text_secondary};
         font-size: {s(13)}px;
+    }}
+    QLabel#heroEyebrow {{
+        color: {p.accent_text};
+        font-size: {s(10)}px;
+        font-weight: 700;
+    }}
+    QLabel#stepTitle {{
+        font-size: {s(13)}px;
+        font-weight: 700;
+    }}
+    QLabel#stepHint {{
+        color: {p.text_secondary};
+        font-size: {s(11)}px;
+    }}
+    QLabel#toolTitle {{
+        font-size: {s(13)}px;
+        font-weight: 700;
+    }}
+    QLabel#toolText {{
+        color: {p.text_secondary};
+        font-size: {s(11)}px;
+    }}
+    QLabel#toolMeta {{
+        color: {p.text_muted};
+        font-size: {s(10)}px;
+        font-weight: 600;
+    }}
+    QLabel#helpQuestion {{
+        font-size: {s(13)}px;
+        font-weight: 700;
     }}
     QLabel#brandTitle {{
         font-family: {display_family()};
@@ -641,7 +708,7 @@ def build_stylesheet(
         font-weight: 700;
     }}
     QLabel#statePill[state="running"] {{
-        color: {p.accent};
+        color: {p.accent_text};
         background-color: {p.accent_soft};
     }}
     QLabel#statePill[state="queued"] {{
@@ -714,7 +781,7 @@ def build_stylesheet(
     }}
     QLineEdit:focus, QPlainTextEdit:focus, QTextEdit:focus, QComboBox:focus, QSpinBox:focus,
     QDoubleSpinBox:focus {{
-        border: 1px solid {p.accent};
+        border: 1px solid {p.accent_text};
         background-color: {p.input_focus};
     }}
     QLineEdit:disabled, QPlainTextEdit:disabled, QComboBox:disabled, QSpinBox:disabled {{
@@ -729,7 +796,7 @@ def build_stylesheet(
         font-size: {s(12)}px;
     }}
     QLineEdit#searchField:focus {{
-        border: 1px solid {p.accent};
+        border: 1px solid {p.accent_text};
         background-color: {p.input_focus};
     }}
     QLineEdit#urlField {{
@@ -740,7 +807,7 @@ def build_stylesheet(
         font-size: {s(13)}px;
     }}
     QLineEdit#urlField:focus {{
-        border: 1px solid {p.accent};
+        border: 1px solid {p.accent_text};
         background-color: {p.input_focus};
     }}
     QLineEdit#urlField[invalid="true"] {{
@@ -835,12 +902,12 @@ def build_stylesheet(
     }}
     QPushButton#secondaryBtn {{
         background-color: {p.accent_soft};
-        color: {p.accent};
+        color: {p.accent_text};
         border: 1px solid transparent;
         font-weight: 700;
     }}
     QPushButton#secondaryBtn:hover {{
-        border: 1px solid {_rgba(p.accent, 0.55)};
+        border: 1px solid {_rgba(p.accent_text, 0.55)};
         background-color: {p.accent_softer};
     }}
     QPushButton#dangerBtn {{
@@ -865,13 +932,13 @@ def build_stylesheet(
     QPushButton#linkBtn {{
         background-color: transparent;
         border: none;
-        color: {p.accent};
+        color: {p.accent_text};
         padding: 0px;
         font-weight: 600;
         text-align: left;
     }}
     QPushButton#linkBtn:hover {{
-        color: {p.accent_hover};
+        color: {p.text};
     }}
     QPushButton#iconBtn, QPushButton#iconBtnDanger {{
         background-color: transparent;
@@ -927,8 +994,8 @@ def build_stylesheet(
     }}
     QPushButton#chip:checked {{
         background-color: {p.accent_soft};
-        border-color: {_rgba(p.accent, 0.55)};
-        color: {p.accent};
+        border-color: {_rgba(p.accent_text, 0.55)};
+        color: {p.accent_text};
     }}
     QPushButton#accentSwatch {{
         background: transparent;
@@ -958,7 +1025,7 @@ def build_stylesheet(
         background-color: {p.surface_hover};
     }}
     QTabBar::tab:selected {{
-        color: {p.accent};
+        color: {p.accent_text};
         background-color: {p.accent_soft};
     }}
     QScrollArea {{
@@ -1154,7 +1221,7 @@ def apply_appearance(
     qt_palette.setColor(QPalette.ColorRole.Button, _qcolor(p.surface_alt))
     qt_palette.setColor(QPalette.ColorRole.ButtonText, _qcolor(p.text))
     qt_palette.setColor(QPalette.ColorRole.BrightText, _qcolor(p.danger))
-    qt_palette.setColor(QPalette.ColorRole.Link, _qcolor(p.accent))
+    qt_palette.setColor(QPalette.ColorRole.Link, _qcolor(p.accent_text))
     qt_palette.setColor(QPalette.ColorRole.Highlight, _qcolor(p.accent))
     qt_palette.setColor(QPalette.ColorRole.HighlightedText, _qcolor(p.accent_ink))
     qt_palette.setColor(QPalette.ColorRole.PlaceholderText, _qcolor(p.text_muted))

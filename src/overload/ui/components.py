@@ -60,6 +60,7 @@ from overload.core.paths import default_data_dir
 from overload.downloads.models import TaskSnapshot
 from overload.downloads.state import TaskState
 from overload.history.store import HistoryEntry
+from overload.library.scan import LibraryFile
 from overload.ui import icons
 from overload.ui.failure_text import FailureInfo, explain_failure
 from overload.ui.theme import Palette, qcolor
@@ -159,7 +160,7 @@ class GlyphBadge(QWidget):
         super().__init__()
         self._icon_name = icon_name
         self._palette = palette
-        self._color = color or palette.accent
+        self._color = color or palette.accent_text
         self._background = background or palette.accent_soft
         self._radius = radius if radius is not None else size * 0.3
         self._icon_size = icon_size
@@ -227,7 +228,7 @@ class LogoBadge(QWidget):
         painter.setBrush(grad)
         radius = rect.width() * 0.3
         painter.drawRoundedRect(rect, radius, radius)
-        pix = icons.pixmap("zap", "#E8EDE5", int(self._size * 0.52))
+        pix = icons.pixmap("zap", "#EAF1E8", int(self._size * 0.52))
         offset = (self._size - int(self._size * 0.52)) / 2
         painter.drawPixmap(int(offset), int(offset), pix)
         painter.end()
@@ -277,6 +278,7 @@ class NavButton(QAbstractButton):
         self._scale = scale
         self._compact = False
         self._hovered = False
+        self._badge = 0
         self.setCheckable(True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
@@ -293,6 +295,13 @@ class NavButton(QAbstractButton):
 
     def sizeHint(self) -> QSize:  # noqa: N802
         return QSize(round(200 * self._scale), round(42 * self._scale))
+
+    def set_badge(self, count: int) -> None:
+        """Pastille compteur affichée à droite du libellé (0 = masquée)."""
+        count = max(0, int(count))
+        if count != self._badge:
+            self._badge = count
+            self.update()
 
     def set_compact(self, compact: bool) -> None:
         self._compact = compact
@@ -328,7 +337,12 @@ class NavButton(QAbstractButton):
             painter.setBrush(qcolor(p.surface_hover))
             painter.drawRoundedRect(rect, radius, radius)
 
-        color = p.accent if self.isChecked() else (p.text if self._hovered else p.text_secondary)
+        if self.isChecked():
+            color = p.accent_text
+        elif self._hovered:
+            color = p.text
+        else:
+            color = p.text_secondary
         if self.isChecked():
             bar = QRectF(0, rect.center().y() - 9, 3, 18)
             painter.setBrush(qcolor(p.accent))
@@ -358,6 +372,35 @@ class NavButton(QAbstractButton):
             painter.drawText(
                 text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, self.label
             )
+        if self._badge:
+            badge_text = str(self._badge) if self._badge < 100 else "99+"
+            metrics = QFontMetrics(self.font())
+            text_w = metrics.horizontalAdvance(badge_text)
+            pill_w = text_w + round(12 * self._scale)
+            pill_h = round(18 * self._scale)
+            if self._compact:
+                pill = QRectF(
+                    self.width() / 2 + round(3 * self._scale),
+                    rect.center().y() - pill_h - round(3 * self._scale),
+                    pill_w,
+                    pill_h,
+                )
+            else:
+                pill = QRectF(
+                    self.width() - pill_w - round(10 * self._scale),
+                    rect.center().y() - pill_h / 2,
+                    pill_w,
+                    pill_h,
+                )
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(qcolor(p.accent))
+            painter.drawRoundedRect(pill, pill_h / 2, pill_h / 2)
+            painter.setPen(QColor(p.accent_ink))
+            badge_font = QFont(self.font())
+            badge_font.setPixelSize(max(9, round(10 * self._scale)))
+            badge_font.setWeight(QFont.Weight.Bold)
+            painter.setFont(badge_font)
+            painter.drawText(pill, Qt.AlignmentFlag.AlignCenter, badge_text)
         painter.end()
 
 
@@ -474,7 +517,7 @@ class StatCard(QFrame):
         self._palette = palette
         self._tone = tone
         colors = {
-            "accent": (palette.accent, palette.accent_soft),
+            "accent": (palette.accent_text, palette.accent_soft),
             "info": (palette.info, palette.info_soft),
             "success": (palette.success, palette.success_soft),
             "warning": (palette.warning, palette.warning_soft),
@@ -508,7 +551,7 @@ class StatCard(QFrame):
     def refresh_theme(self, palette: Palette) -> None:
         self._palette = palette
         colors = {
-            "accent": (palette.accent, palette.accent_soft),
+            "accent": (palette.accent_text, palette.accent_soft),
             "info": (palette.info, palette.info_soft),
             "success": (palette.success, palette.success_soft),
             "warning": (palette.warning, palette.warning_soft),
@@ -596,7 +639,7 @@ class ProgressBar(QWidget):
             return qcolor(p.danger), qcolor(p.danger)
         if self._state == "warning":
             return qcolor(p.warning), qcolor(p.accent)
-        return qcolor(p.accent_pressed), qcolor(p.accent_hover)
+        return qcolor(p.accent), qcolor(p.accent_hover)
 
     def paintEvent(self, _event) -> None:  # noqa: N802
         p = self._palette
@@ -702,7 +745,7 @@ class Sparkline(QWidget):
         painter.setOpacity(0.10)
         painter.drawPath(area)
         painter.setOpacity(1.0)
-        pen = QPen(qcolor(p.accent), 1.8)
+        pen = QPen(qcolor(p.accent_text), 1.8)
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
         painter.setPen(pen)
@@ -1099,13 +1142,17 @@ class DownloadCard(QFrame):
         self.cancel_btn = IconButton(
             "x", "Annuler et supprimer le fichier partiel", palette, danger=True
         )
-        self.open_btn = IconButton("folder", "Ouvrir le dossier", palette)
+        self.open_file_btn = IconButton(
+            "play", "Ouvrir le fichier (application par défaut)", palette
+        )
+        self.open_btn = IconButton("folder", "Afficher dans le dossier", palette)
         self.remove_btn = IconButton("trash", "Retirer de la liste", palette)
         for btn in (
             self.pause_btn,
             self.resume_btn,
             self.retry_btn,
             self.cancel_btn,
+            self.open_file_btn,
             self.open_btn,
             self.remove_btn,
         ):
@@ -1146,6 +1193,7 @@ class DownloadCard(QFrame):
         self.resume_btn.clicked.connect(lambda: self._call("resume_task"))
         self.retry_btn.clicked.connect(lambda: self._call("retry_task"))
         self.cancel_btn.clicked.connect(lambda: self._call("cancel_task"))
+        self.open_file_btn.clicked.connect(lambda: self._call("open_task_file"))
         self.open_btn.clicked.connect(lambda: self._call("open_task_folder"))
         self.remove_btn.clicked.connect(lambda: self._call("remove_task"))
 
@@ -1170,6 +1218,7 @@ class DownloadCard(QFrame):
             self.resume_btn,
             self.retry_btn,
             self.cancel_btn,
+            self.open_file_btn,
             self.open_btn,
             self.remove_btn,
         ):
@@ -1204,7 +1253,20 @@ class DownloadCard(QFrame):
         pct = snap.progress_percent
         self.bar.set_state(key if key != "neutral" else "queued")
         self.bar.set_value_animated(pct)
-        self.percent.setText(f"{pct:.0f} %" if pct is not None else "…")
+        if pct is None:
+            self.percent.setText("…")
+        elif snap.state is TaskState.FINALIZING:
+            # Octets reçus, fichier en cours d'écriture/vérification : on dit ce
+            # qui se passe au lieu d'afficher un « 100 % » prématuré.
+            self.percent.setText("…")
+            self.percent.setToolTip("Vérification du fichier en cours…")
+        elif snap.state is TaskState.COMPLETED:
+            self.percent.setText("100 %")
+            self.percent.setToolTip("")
+        else:
+            # Troncature (jamais d'arrondi vers le haut) : 99,9 % reçu reste « 99 % ».
+            self.percent.setText(f"{int(pct)} %")
+            self.percent.setToolTip("")
 
         total = format_bytes(snap.total_bytes) if snap.total_bytes else "taille inconnue"
         starting = (
@@ -1226,6 +1288,9 @@ class DownloadCard(QFrame):
         elif snap.state is TaskState.COMPLETED:
             self.speed_lbl.setText("Fichier vérifié")
             self.eta_lbl.setText("")
+        elif snap.state is TaskState.FINALIZING:
+            self.speed_lbl.setText("Écriture et vérification du fichier…")
+            self.eta_lbl.setText("Presque terminé")
         elif snap.state is TaskState.PAUSED:
             self.speed_lbl.setText("En pause")
             self.eta_lbl.setText("Reprise possible")
@@ -1284,6 +1349,7 @@ class DownloadCard(QFrame):
         self.resume_btn.setVisible(st is TaskState.PAUSED)
         self.retry_btn.setVisible(st in {TaskState.FAILED, TaskState.CANCELLED})
         self.cancel_btn.setVisible(st in {TaskState.RUNNING, TaskState.QUEUED, TaskState.PAUSED})
+        self.open_file_btn.setVisible(st is TaskState.COMPLETED and snap.file_exists)
         self.open_btn.setVisible(st is TaskState.COMPLETED)
         self.remove_btn.setVisible(
             st in {TaskState.COMPLETED, TaskState.FAILED, TaskState.CANCELLED}
@@ -1373,16 +1439,22 @@ class HistoryRow(QFrame):
 
         actions = QHBoxLayout()
         actions.setSpacing(2)
+        self.open_file_btn = IconButton(
+            "play", "Ouvrir le fichier (application par défaut)", palette
+        )
+        self.open_file_btn.setVisible(entry.file_exists)
         self.open_btn = IconButton("folder", "Rouvrir le dossier", palette)
         self.redl_btn = IconButton("refresh", "Retélécharger une copie", palette)
         self.del_btn = IconButton(
             "trash", "Retirer de l'historique (le fichier est conservé)", palette
         )
+        actions.addWidget(self.open_file_btn)
         actions.addWidget(self.open_btn)
         actions.addWidget(self.redl_btn)
         actions.addWidget(self.del_btn)
         layout.addLayout(actions)
 
+        self.open_file_btn.clicked.connect(self._open_file)
         self.open_btn.clicked.connect(self._open)
         self.redl_btn.clicked.connect(self._redownload)
         self.del_btn.clicked.connect(lambda: self._on_remove(entry.id))
@@ -1390,6 +1462,13 @@ class HistoryRow(QFrame):
         if entry.file_exists and kind_of(entry.filename) in {"image", "video"}:
             if self.thumb.mark_requested():
                 self._thumbnails.request(entry.destination_path, self.thumb.set_pixmap)
+
+    def _open_file(self) -> None:
+        try:
+            self._manager.open_history_file(self.entry.id)
+        except Exception as exc:  # noqa: BLE001
+            if self._on_error:
+                self._on_error(exc)
 
     def _open(self) -> None:
         try:
@@ -1409,7 +1488,7 @@ class HistoryRow(QFrame):
 
     def refresh_theme(self, palette: Palette) -> None:
         self._palette = palette
-        for btn in (self.open_btn, self.redl_btn, self.del_btn):
+        for btn in (self.open_file_btn, self.open_btn, self.redl_btn, self.del_btn):
             btn.refresh_theme(palette)
         self.thumb.refresh_theme(palette)
 
@@ -1437,7 +1516,7 @@ class EmptyState(QWidget):
             icon_name,
             palette,
             size=58,
-            color=palette.accent,
+            color=palette.accent_text,
             background=palette.accent_soft,
             radius=18,
             icon_size=26,
@@ -1469,7 +1548,7 @@ class EmptyState(QWidget):
 
     def refresh_theme(self, palette: Palette) -> None:
         self._palette = palette
-        self.badge.refresh_theme(palette, palette.accent, palette.accent_soft)
+        self.badge.refresh_theme(palette, palette.accent_text, palette.accent_soft)
 
 
 class ActivityRow(QFrame):
@@ -1747,3 +1826,206 @@ class InfoBanner(QFrame):
         self.text.setWordWrap(True)
         col.addWidget(self.text)
         layout.addLayout(col, 1)
+
+
+class StepBadge(QWidget):
+    """Pastille numérotée du parcours en étapes (1, 2, 3… ou coche si terminé)."""
+
+    def __init__(self, number: int, palette: Palette, *, size: int = 28) -> None:
+        super().__init__()
+        self._number = number
+        self._palette = palette
+        self._done = False
+        self.setFixedSize(size, size)
+
+    def set_done(self, done: bool) -> None:
+        if done != self._done:
+            self._done = done
+            self.update()
+
+    def refresh_theme(self, palette: Palette) -> None:
+        self._palette = palette
+        self.update()
+
+    def paintEvent(self, _event) -> None:  # noqa: N802
+        p = self._palette
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(qcolor(p.success if self._done else p.accent))
+        painter.drawEllipse(QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5))
+        ink = "#101713" if self._done else p.accent_ink
+        if self._done:
+            pix = icons.pixmap("check", ink, round(self.width() * 0.58), 2.2)
+            painter.drawPixmap(
+                round((self.width() - pix.width() / pix.devicePixelRatio()) / 2),
+                round((self.height() - pix.height() / pix.devicePixelRatio()) / 2),
+                pix,
+            )
+        else:
+            font = QFont(self.font())
+            font.setPixelSize(max(10, round(self.width() * 0.46)))
+            font.setWeight(QFont.Weight.Bold)
+            painter.setFont(font)
+            painter.setPen(QColor(ink))
+            painter.drawText(QRectF(self.rect()), Qt.AlignmentFlag.AlignCenter, str(self._number))
+        painter.end()
+
+
+class ToolCard(QPushButton):
+    """Carte d'outil cliquable : à quoi ça sert, quoi fournir, ce qui va se passer.
+
+    Utilisée dans l'espace Créateurs et l'aide pour expliquer chaque outil
+    AVANT de l'ouvrir : titre, description courte et ligne « pratique »
+    (fichiers acceptés / résultat attendu).
+    """
+
+    def __init__(
+        self,
+        icon_name: str,
+        title: str,
+        text: str,
+        meta: str,
+        palette: Palette,
+        *,
+        on_click=None,
+        scale: float = 1.0,
+    ) -> None:
+        super().__init__()
+        self._palette = palette
+        self._icon_name = icon_name
+        self.setObjectName("toolCard")
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setAccessibleName(title)
+        self.setToolTip(title)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        self.setMinimumHeight(round(96 * scale))
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(
+            round(14 * scale), round(12 * scale), round(12 * scale), round(12 * scale)
+        )
+        layout.setSpacing(round(11 * scale))
+        self.badge = GlyphBadge(
+            icon_name, palette, size=round(38 * scale), radius=round(11 * scale), icon_size=19
+        )
+        layout.addWidget(self.badge, 0, Qt.AlignmentFlag.AlignTop)
+        col = QVBoxLayout()
+        col.setSpacing(3)
+        self.title_label = QLabel(title)
+        self.title_label.setObjectName("toolTitle")
+        self.title_label.setWordWrap(True)
+        col.addWidget(self.title_label)
+        self.text_label = QLabel(text)
+        self.text_label.setObjectName("toolText")
+        self.text_label.setWordWrap(True)
+        col.addWidget(self.text_label)
+        self.meta_label = QLabel(meta)
+        self.meta_label.setObjectName("toolMeta")
+        self.meta_label.setWordWrap(True)
+        col.addWidget(self.meta_label)
+        col.addStretch()
+        layout.addLayout(col, 1)
+        self.chevron = QLabel()
+        self.chevron.setPixmap(icons.pixmap("chevron-right", palette.text_muted, 16))
+        layout.addWidget(self.chevron, 0, Qt.AlignmentFlag.AlignVCenter)
+        # Les enfants ne doivent jamais intercepter le clic de la carte.
+        for child in (self.badge, self.title_label, self.text_label, self.meta_label, self.chevron):
+            child.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        if on_click is not None:
+            self.clicked.connect(on_click)
+
+    def refresh_theme(self, palette: Palette) -> None:
+        self._palette = palette
+        self.badge.refresh_theme(palette, palette.accent_text, palette.accent_soft)
+        self.chevron.setPixmap(icons.pixmap("chevron-right", palette.text_muted, 16))
+
+
+class LibraryRow(QFrame):
+    """Ligne de la bibliothèque : un fichier local retrouvé sur le disque."""
+
+    def __init__(
+        self,
+        item: LibraryFile,
+        palette: Palette,
+        thumbnails: ThumbnailService,
+        *,
+        source_url: str = "",
+        on_open_file=None,
+        on_open_folder=None,
+        on_analyze=None,
+        scale: float = 1.0,
+    ) -> None:
+        super().__init__()
+        self.item = item
+        self._palette = palette
+        self._on_analyze = on_analyze
+        self.setObjectName("historyCard")
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(
+            round(13 * scale), round(11 * scale), round(13 * scale), round(11 * scale)
+        )
+        layout.setSpacing(round(12 * scale))
+
+        self.thumb = Thumbnail(palette, width=round(66 * scale), height=round(48 * scale))
+        self.thumb.set_source(item.name, str(item.path))
+        layout.addWidget(self.thumb, 0, Qt.AlignmentFlag.AlignTop)
+
+        info = QVBoxLayout()
+        info.setSpacing(3)
+        title_row = QHBoxLayout()
+        title_row.setSpacing(8)
+        self.name = ElidedLabel(item.name)
+        self.name.setObjectName("cardTitle")
+        title_row.addWidget(self.name, 1)
+        self.chip = QLabel(item.extension.upper() or "FICHIER")
+        self.chip.setObjectName("formatChip")
+        title_row.addWidget(self.chip, 0)
+        info.addLayout(title_row)
+
+        when = human_time_ago(datetime.fromtimestamp(item.modified_at, tz=UTC).isoformat())
+        self.meta = ElidedLabel(
+            f"{item.kind_label}  ·  {format_bytes(item.size_bytes)}  ·  {when}"
+            f"  ·  {item.folder_name}"
+        )
+        self.meta.setObjectName("mutedLabel")
+        self.meta.setToolTip(str(item.path))
+        info.addWidget(self.meta)
+
+        self.source = ElidedLabel(
+            f"Téléchargé depuis {host_of(source_url)}" if source_url else str(item.path.parent)
+        )
+        self.source.setObjectName("tinyLabel")
+        self.source.setToolTip(source_url or str(item.path.parent))
+        info.addWidget(self.source)
+        layout.addLayout(info, 1)
+
+        actions = QHBoxLayout()
+        actions.setSpacing(2)
+        self.open_file_btn = IconButton(
+            "play", "Ouvrir le fichier (application par défaut)", palette
+        )
+        self.open_folder_btn = IconButton("folder", "Afficher dans le dossier", palette)
+        self.analyze_btn = IconButton(
+            "monitor", "Analyser ce fichier dans l'espace Créateurs", palette
+        )
+        self.analyze_btn.setVisible(on_analyze is not None and item.kind in {"video", "audio"})
+        actions.addWidget(self.open_file_btn)
+        actions.addWidget(self.open_folder_btn)
+        actions.addWidget(self.analyze_btn)
+        layout.addLayout(actions)
+
+        if on_open_file is not None:
+            self.open_file_btn.clicked.connect(lambda: on_open_file(item))
+        if on_open_folder is not None:
+            self.open_folder_btn.clicked.connect(lambda: on_open_folder(item))
+        if on_analyze is not None:
+            self.analyze_btn.clicked.connect(lambda: on_analyze(item))
+
+        if item.kind in {"image", "video"} and self.thumb.mark_requested():
+            thumbnails.request(str(item.path), self.thumb.set_pixmap)
+
+    def refresh_theme(self, palette: Palette) -> None:
+        self._palette = palette
+        for btn in (self.open_file_btn, self.open_folder_btn, self.analyze_btn):
+            btn.refresh_theme(palette)
+        self.thumb.refresh_theme(palette)

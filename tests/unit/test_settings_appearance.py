@@ -3,10 +3,9 @@ from overload.ui.theme import (
     ACCENTS,
     DEFAULT_ACCENT,
     FOREST_BRAND,
-    FOREST_CHARCOAL,
     FOREST_CREAM,
-    FOREST_MOSS,
-    FOREST_PINE,
+    FOREST_NIGHT,
+    FOREST_PANEL,
     FOREST_SAGE,
     build_stylesheet,
     palette,
@@ -46,24 +45,34 @@ def test_old_default_violet_migrates_once_to_forest(tmp_path):
     assert SettingsStore(path).get().accent == "violet"
 
 
-def test_forest_palette_matches_overx_forest_tokens():
+def test_forest_palette_matches_v2_identity_tokens():
+    # Identité v2.0 demandée : fond #101713, panneaux #1A261F,
+    # vert forêt #315E43 (actions), vert sauge #A9C7AE (détails).
     dark = palette("dark", "forest")
-    assert dark.canvas == FOREST_PINE == "#14251B"
-    assert dark.surface == FOREST_CHARCOAL == "#202722"
-    assert dark.text == FOREST_CREAM == "#E8EDE5"
-    assert dark.text_secondary == FOREST_SAGE == "#A8BFA5"
-    assert dark.accent == FOREST_MOSS == "#52765B"
-    assert ACCENTS["forest"].light == FOREST_BRAND == "#244A35"
+    assert dark.canvas == FOREST_NIGHT == "#101713"
+    assert dark.surface == FOREST_PANEL == "#1A261F"
+    assert dark.text == FOREST_CREAM == "#EAF1E8"
+    assert dark.text_secondary == FOREST_SAGE == "#A9C7AE"
+    assert dark.accent == FOREST_BRAND == "#315E43"
+    # Le texte d'accent passe par la sauge pour rester lisible sur le fond nuit.
+    assert dark.accent_text == FOREST_SAGE
+    assert ACCENTS["forest"].dark == FOREST_BRAND
+    assert ACCENTS["forest"].light == FOREST_BRAND
+    # Couleurs d'état distinctes de l'accent et entre elles.
+    states = {dark.accent, dark.success, dark.warning, dark.danger, dark.info}
+    assert len(states) == 5
 
     light = palette("light", "forest")
     assert light.theme == "light"
-    assert light.text == FOREST_PINE
+    assert light.text == FOREST_NIGHT
     assert light.accent == FOREST_BRAND
+    assert light.accent_text == FOREST_BRAND
 
 
 def test_palette_uses_requested_accent_and_theme():
     dark = palette("dark", "violet")
-    assert dark.canvas == "#14251B"  # socle forêt commun, accent personnalisable
+    assert dark.canvas == "#101713"  # socle vert-noir commun, accent personnalisable
+    assert dark.accent_text == dark.accent
     assert dark.accent == ACCENTS["violet"].dark
     light = palette("light", "blue")
     assert light.theme == "light"
@@ -73,6 +82,8 @@ def test_palette_uses_requested_accent_and_theme():
 def test_stylesheet_scales_with_ui_size():
     normal = build_stylesheet("dark", "forest", "normal")
     large = build_stylesheet("dark", "forest", "large")
-    assert "#14251B" in normal
+    assert "#101713" in normal
+    assert "#315E43" in normal
+    assert "#A9C7AE" in normal
     assert normal != large
     assert "font-size: 15px" in large

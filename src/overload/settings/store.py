@@ -14,7 +14,7 @@ from overload.downloads.duplicates import DuplicatePolicy
 
 SETTINGS_SCHEMA_VERSION = 3
 
-# « forest » (OverX Forest) est l'accent par défaut depuis la v1.3 ; les autres
+# « forest » (vert forêt #315E43) est l'accent par défaut depuis la v1.3 ; les autres
 # accents restent choisisables dans Paramètres → Apparence.
 ACCENTS = ("forest", "violet", "blue", "cyan", "emerald", "amber", "rose")
 DEFAULT_ACCENT = "forest"

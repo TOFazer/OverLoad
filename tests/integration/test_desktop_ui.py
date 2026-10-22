@@ -71,7 +71,15 @@ def test_desktop_navigation_and_theme_switch(tmp_path):
         win.show()
         app.processEvents()
 
-        assert set(win._pages) == {"home", "downloads", "creators", "analyzer", "settings"}
+        assert set(win._pages) == {
+            "home",
+            "downloads",
+            "library",
+            "creators",
+            "history",
+            "settings",
+            "help",
+        }
         win.go_to("home")
         app.processEvents()
         assert win.stack.currentWidget() is win._pages["home"]
@@ -214,3 +222,70 @@ def test_analyzer_widget_background_result(tmp_path, monkeypatch):
     assert "25.000" in text
     assert "h264" in text
     widget.close()
+
+
+def test_desktop_v2_navigation_library_and_creators_hub(tmp_path):
+    import time
+
+    from overload.downloads.manager import DownloadManager
+    from overload.history.store import DownloadHistoryStore
+    from overload.settings.store import SettingsStore
+    from overload.ui.desktop import create_main_window
+
+    app = _make_app()
+    settings_store = SettingsStore(tmp_path / "settings.json")
+    downloads = tmp_path / "downloads"
+    downloads.mkdir()
+    (downloads / "clip-bibliotheque.mp4").write_bytes(b"x" * 2048)
+    (downloads / "piste-audio.mp3").write_bytes(b"x" * 512)
+    with (
+        DownloadHistoryStore(tmp_path / "library.db") as history,
+        DownloadManager(downloads, history=history) as manager,
+    ):
+        win = create_main_window(manager, history, settings_store, data_dir=tmp_path)
+        win.show()
+        app.processEvents()
+
+        # Toutes les pages v2.0 sont atteignables, historique et aide comprises.
+        for key in ("downloads", "library", "creators", "history", "settings", "help", "home"):
+            win.go_to(key)
+            app.processEvents()
+            assert win.stack.currentWidget() is win._pages[key]
+
+        # L'ancien accès « analyzer » atterrit dans l'espace Créateurs.
+        win.go_to("analyzer")
+        app.processEvents()
+        assert win._current_page == "creators"
+        tabs = win.creators_widget.tabs
+        assert tabs.tabText(tabs.currentIndex()) == "Analyse"
+
+        # Le hub des créateurs bascule sur l'outil demandé.
+        win.creators_widget.show_tool("tracks")
+        app.processEvents()
+        assert "Sous-titres" in win.creators_widget.tabs.tabText(
+            win.creators_widget.tabs.currentIndex()
+        )
+
+        # La bibliothèque indexe les fichiers locaux du dossier de destination.
+        win.go_to("library")
+        deadline = time.monotonic() + 5
+        while len(win._library_rows) < 2 and time.monotonic() < deadline:
+            app.processEvents()
+            time.sleep(0.02)
+        names = {row.item.name for row in win._library_rows}
+        assert names == {"clip-bibliotheque.mp4", "piste-audio.mp3"}
+
+        # Le filtre par type ne montre que la vidéo.
+        win.library_filters.set_value("video", emit=True)
+        app.processEvents()
+        assert [row.item.name for row in win._library_rows] == ["clip-bibliotheque.mp4"]
+
+        # « Analyser » depuis la bibliothèque préremplit l'analyse des Créateurs.
+        win.analyze_path(downloads / "clip-bibliotheque.mp4")
+        app.processEvents()
+        assert win._current_page == "creators"
+        analyzer_path = win.creators_widget.analyzer.findChild(
+            QtWidgets.QLineEdit, "analyzerPath"
+        )
+        assert analyzer_path.text().endswith("clip-bibliotheque.mp4")
+        win.close()
