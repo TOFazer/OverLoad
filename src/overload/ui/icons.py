@@ -363,6 +363,60 @@ def draw_glyph(painter: QPainter, name: str, color: str, width: float = 1.7) -> 
             )
         )
         painter.drawLine(QPointF(14.2, 6.4), QPointF(17.6, 9.8))
+    elif name == "library":
+        # Étagère de médias : trois volumes rangés côte à côte.
+        _rounded_rect(painter, 4, 4, 3.6, 16, 1.1)
+        _rounded_rect(painter, 10.2, 4, 3.6, 16, 1.1)
+        painter.save()
+        painter.translate(17.4, 12)
+        painter.rotate(14)
+        painter.drawRoundedRect(QRectF(-1.8, -8, 3.6, 16), 1.1, 1.1)
+        painter.restore()
+    elif name == "history":
+        # Horloge parcourue en arrière : revenir sur le passé.
+        painter.drawArc(QRectF(4.2, 4.2, 15.6, 15.6), 40 * 16, 290 * 16)
+        painter.drawPolyline(
+            QPolygonF([QPointF(4.4, 3.8), QPointF(4.2, 7.6), QPointF(7.9, 7.4)])
+        )
+        painter.drawLine(QPointF(12, 8.2), QPointF(12, 12.2))
+        painter.drawLine(QPointF(12, 12.2), QPointF(15.2, 14))
+    elif name == "help":
+        painter.drawEllipse(QPointF(12, 12), 8.6, 8.6)
+        path = QPainterPath(QPointF(9.6, 9.2))
+        path.cubicTo(9.8, 7.4, 11, 6.6, 12.1, 6.6)
+        path.cubicTo(13.6, 6.6, 14.6, 7.6, 14.6, 9)
+        path.cubicTo(14.6, 11, 12.1, 11.2, 12.1, 13.4)
+        painter.drawPath(path)
+        painter.setBrush(QColor(color))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(QPointF(12.1, 16.9), 1.05, 1.05)
+    elif name == "clipboard":
+        _rounded_rect(painter, 5, 4.6, 14, 16.4, 2)
+        _rounded_rect(painter, 8.8, 3, 6.4, 3.4, 1.4)
+        painter.drawPolyline(
+            QPolygonF([QPointF(8.8, 13.4), QPointF(11, 15.6), QPointF(15.4, 10.8)])
+        )
+    elif name == "layers":
+        painter.drawPolygon(
+            QPolygonF(
+                [QPointF(12, 3.4), QPointF(20.6, 8), QPointF(12, 12.6), QPointF(3.4, 8)]
+            )
+        )
+        painter.drawPolyline(
+            QPolygonF([QPointF(3.4, 12.2), QPointF(12, 16.8), QPointF(20.6, 12.2)])
+        )
+        painter.drawPolyline(
+            QPolygonF([QPointF(3.4, 16.2), QPointF(12, 20.8), QPointF(20.6, 16.2)])
+        )
+    elif name == "captions":
+        _rounded_rect(painter, 3, 5.4, 18, 13.2, 2.4)
+        painter.drawLine(QPointF(6.6, 11), QPointF(13.4, 11))
+        painter.drawLine(QPointF(6.6, 15), QPointF(17.2, 15))
+    elif name == "scissors":
+        painter.drawEllipse(QPointF(6.4, 6.4), 2.7, 2.7)
+        painter.drawEllipse(QPointF(6.4, 17.6), 2.7, 2.7)
+        painter.drawLine(QPointF(8.6, 8.4), QPointF(19.6, 18.6))
+        painter.drawLine(QPointF(8.6, 15.6), QPointF(19.6, 5.4))
     elif name == "zap":
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QColor(color))

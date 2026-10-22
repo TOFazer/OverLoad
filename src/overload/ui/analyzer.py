@@ -27,8 +27,13 @@ def create_analyzer_widget():
     widget = QWidget()
     layout = QVBoxLayout(widget)
     hint = QLabel(
-        "Analyse locale, sans modifier le fichier. La lecture complète peut durer jusqu'à "
-        "10 minutes. Les alertes de compatibilité sont indicatives, pas une certification."
+        "À quoi ça sert : vérifier un fichier AVANT de l'importer dans un logiciel de "
+        "montage (Premiere Pro, DaVinci Resolve, CapCut…). OverLoad affiche le conteneur, "
+        "les codecs, la résolution, la cadence, la durée et toutes les pistes, puis signale "
+        "les risques connus (codec rare, cadence variable, couleurs 10 bits…). Fichiers "
+        "acceptés : vidéos et audios locaux. L'analyse est 100 % locale, ne modifie jamais "
+        "le fichier et ne convertit rien en silence ; la lecture complète peut durer "
+        "jusqu'à 10 minutes. Les alertes sont indicatives, pas une certification."
     )
     hint.setWordWrap(True)
     layout.addWidget(hint)
@@ -151,6 +156,12 @@ def create_analyzer_widget():
 
     timer = QTimer(widget)
     timer.setInterval(100)
+    def set_file(filename: str) -> None:
+        """Préremplit le champ fichier (ex. depuis la bibliothèque)."""
+        path.setText(str(filename))
+        status.setText("Fichier prêt à analyser : cliquez sur « Analyser ».")
+
+    widget.set_file = set_file  # type: ignore[attr-defined]
     timer.timeout.connect(collect)
     browse.clicked.connect(choose)
     start.clicked.connect(launch)

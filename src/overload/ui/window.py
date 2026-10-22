@@ -1,8 +1,14 @@
-"""Fenêtre principale d'OverLoad : navigation latérale, accueil, réglages.
+"""Fenêtre principale d'OverLoad v2.0 : navigation latérale et pages de travail.
 
-Cette couche ne contient aucune logique métier : elle observe les instantanés du
-`DownloadManager`, enregistre les préférences via `SettingsStore` et délègue les
-opérations à l'historique et au moteur de téléchargement.
+Organisation (barre latérale fixe, zone de travail principale) :
+Accueil, Téléchargements, Bibliothèque, Espace Créateurs, Historique,
+Paramètres et Aide. L'analyse multimédia vit dans l'espace Créateurs,
+avec les autres outils de préparation au montage.
+
+Cette couche ne contient aucune logique métier : elle observe les instantanés
+du `DownloadManager`, indexe les fichiers locaux via `overload.library`,
+enregistre les préférences via `SettingsStore` et délègue les opérations à
+l'historique et au moteur de téléchargement.
 """
 
 from __future__ import annotations
@@ -61,10 +67,11 @@ from PySide6.QtWidgets import (
 from overload import __version__
 from overload.core.errors import OverloadError
 from overload.core.formatting import format_bytes, format_duration
-from overload.core.paths import default_data_dir, open_folder
+from overload.core.paths import default_data_dir, open_file, open_folder
 from overload.downloads.duplicates import DuplicateDetectedError, DuplicatePolicy
 from overload.downloads.state import TaskState
 from overload.downloads.youtube import QUALITY_CHOICES, is_youtube_url
+from overload.library.scan import KIND_FILTERS, SORTS, LibraryScan, filter_files, scan_library
 from overload.settings.store import ACCENTS as ACCENT_KEYS
 from overload.settings.store import UI_SCALES as UI_SCALE_KEYS
 from overload.ui import icons
@@ -79,14 +86,17 @@ from overload.ui.components import (
     HistoryRow,
     IconButton,
     InfoBanner,
+    LibraryRow,
     LogoBadge,
     NavButton,
     QueueRow,
     SegmentedControl,
     Sparkline,
     StatCard,
+    StepBadge,
     ThumbnailService,
     Toast,
+    ToolCard,
 )
 from overload.ui.failure_text import explain_failure
 from overload.ui.filedialogs import choose_directory, choose_open_file
@@ -100,12 +110,23 @@ from overload.ui.theme import (
 )
 
 PAGE_META: dict[str, tuple[str, str, str, str]] = {
-    "home": ("Accueil", "Votre espace, prêt en un clic.", "home", "accent"),
+    "home": (
+        "Accueil",
+        "Tout commence ici : téléchargez et organisez vos médias simplement.",
+        "home",
+        "accent",
+    ),
     "downloads": (
         "Téléchargements",
-        "Suivez, reprenez et retrouvez tous vos fichiers.",
+        "Tâches en cours, en attente, en pause ou à relancer.",
         "download",
         "info",
+    ),
+    "library": (
+        "Bibliothèque",
+        "Retrouvez et ouvrez vos fichiers locaux, déjà sur le disque.",
+        "library",
+        "success",
     ),
     "creators": (
         "Espace Créateurs",
@@ -113,19 +134,28 @@ PAGE_META: dict[str, tuple[str, str, str, str]] = {
         "film",
         "success",
     ),
-    "analyzer": (
-        "Analyse multimédia",
-        "Inspectez un fichier avant de l'importer dans votre montage.",
-        "monitor",
+    "history": (
+        "Historique",
+        "Vos téléchargements précédents, même après relance d'OverLoad.",
+        "history",
         "warning",
     ),
     "settings": (
         "Paramètres",
-        "Personnalisez OverLoad à votre façon.",
+        "Destination, apparence, comportement et options avancées.",
         "settings",
         "accent",
     ),
+    "help": (
+        "Aide",
+        "Démarrage rapide, dépannage et informations sur l'application.",
+        "help",
+        "info",
+    ),
 }
+
+# Ordre de navigation (barre latérale et raccourcis Ctrl+1…7).
+NAV_ORDER = ["home", "downloads", "library", "creators", "history", "settings", "help"]
 
 SPEED_PRESETS = [
     ("Illimitée", 0),
@@ -149,14 +179,14 @@ def build_app_icon() -> QIcon:
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         rect = QRectF(0, 0, size, size)
         grad = QLinearGradient(rect.topLeft(), rect.bottomRight())
-        grad.setColorAt(0.0, QColor("#52765B"))  # vert mousse (OverX Forest)
-        grad.setColorAt(1.0, QColor("#14251B"))  # vert sapin (OverX Forest)
+        grad.setColorAt(0.0, QColor("#4E7D60"))  # dérivé clair du vert forêt
+        grad.setColorAt(1.0, QColor("#101713"))  # vert-noir profond (identité v2.0)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(grad)
         radius = size * 0.27
         painter.drawRoundedRect(rect, radius, radius)
         painter.scale(size / 24.0, size / 24.0)
-        icons.draw_glyph(painter, "zap", "#E8EDE5")
+        icons.draw_glyph(painter, "zap", "#EAF1E8")
         painter.end()
         icon.addPixmap(pix)
     return icon
@@ -199,6 +229,23 @@ class _MediaProbe(QObject):
             self.done.emit(url, None, str(exc))
         else:
             self.done.emit(url, info, None)
+
+
+class _LibraryProbe(QObject):
+    """Indexe le dossier de la bibliothèque hors du thread graphique."""
+
+    done = Signal(object, object)
+
+    def start(self, root: Path) -> None:
+        threading.Thread(target=self._run, args=(root,), daemon=True).start()
+
+    def _run(self, root: Path) -> None:
+        try:
+            scan = scan_library(root)
+        except Exception as exc:  # noqa: BLE001 - message affiché tel quel
+            self.done.emit(None, str(exc))
+        else:
+            self.done.emit(scan, "")
 
 
 class BatchDialog(QDialog):
@@ -736,8 +783,18 @@ class OverloadWindow(QMainWindow):
         self._probe_url: str | None = None
         self._probe = _MediaProbe(manager, self)
         self._probe.done.connect(self._on_media_info)
+        self._library_root: Path | None = None
+        self._library_scan: LibraryScan | None = None
+        self._library_rows: list[LibraryRow] = []
+        self._library_filter = "all"
+        self._library_sort = "recent"
+        self._library_scanning = False
+        self._library_dirty = True
+        self._library_probe = _LibraryProbe(self)
+        self._library_probe.done.connect(self._on_library_scan)
+        self._tool_cards: list[ToolCard] = []
 
-        self.setWindowTitle("OverLoad — Téléchargements, analyse multimédia et espace Créateurs")
+        self.setWindowTitle("OverLoad — Media Manager")
         self.setWindowIcon(build_app_icon())
         self.resize(1280, 860)
         self.setMinimumSize(1000, 680)
@@ -778,9 +835,11 @@ class OverloadWindow(QMainWindow):
 
         self._add_page("home", self._build_home_page())
         self._add_page("downloads", self._build_downloads_page())
+        self._add_page("library", self._build_library_page())
         self._add_page("creators", self._build_creators_page())
-        self._add_page("analyzer", self._build_analyzer_page())
+        self._add_page("history", self._build_history_page())
         self._add_page("settings", SettingsPage(self))
+        self._add_page("help", self._build_help_page())
         self.toast_widget = Toast(root, self.tokens)
 
     def _build_sidebar(self) -> QFrame:
@@ -801,7 +860,7 @@ class OverloadWindow(QMainWindow):
         brand.setSpacing(0)
         brand_title = QLabel("OverLoad")
         brand_title.setObjectName("brandTitle")
-        brand_subtitle = QLabel("MEDIA SUITE")
+        brand_subtitle = QLabel("MEDIA MANAGER")
         brand_subtitle.setObjectName("brandSubtitle")
         brand.addWidget(brand_title)
         brand.addWidget(brand_subtitle)
@@ -818,18 +877,20 @@ class OverloadWindow(QMainWindow):
         for key, label, icon_name in (
             ("home", "Accueil", "home"),
             ("downloads", "Téléchargements", "download"),
+            ("library", "Bibliothèque", "library"),
             ("creators", "Créateurs", "film"),
+            ("history", "Historique", "history"),
         ):
             self._add_nav(layout, key, label, icon_name)
         layout.addSpacing(16)
 
-        tools = QLabel("OUTILS")
-        tools.setObjectName("navSectionLabel")
-        self._section_labels.append(tools)
-        layout.addWidget(tools)
+        app_section = QLabel("APPLICATION")
+        app_section.setObjectName("navSectionLabel")
+        self._section_labels.append(app_section)
+        layout.addWidget(app_section)
         for key, label, icon_name in (
-            ("analyzer", "Analyse multimédia", "monitor"),
             ("settings", "Paramètres", "sliders"),
+            ("help", "Aide", "help"),
         ):
             self._add_nav(layout, key, label, icon_name)
         layout.addStretch()
@@ -950,24 +1011,71 @@ class OverloadWindow(QMainWindow):
 
         hero = QFrame()
         hero.setObjectName("heroCard")
-        hero_layout = QHBoxLayout(hero)
+        hero_layout = QVBoxLayout(hero)
         hero_layout.setContentsMargins(24, 22, 24, 22)
-        hero_layout.setSpacing(18)
-        left = QVBoxLayout()
-        left.setSpacing(8)
+        hero_layout.setSpacing(14)
+
+        header_row = QHBoxLayout()
+        header_row.setSpacing(18)
+        welcome = QVBoxLayout()
+        welcome.setSpacing(4)
+        eyebrow = QLabel("BIENVENUE DANS OVERLOAD")
+        eyebrow.setObjectName("heroEyebrow")
+        welcome.addWidget(eyebrow)
         self.hero_title = QLabel()
         self.hero_title.setObjectName("heroTitle")
         self.hero_title.setTextFormat(Qt.TextFormat.RichText)
+        welcome.addWidget(self.hero_title)
         self.hero_subtitle = QLabel(
-            "Collez un lien YouTube ou direct : OverLoad récupère le titre, "
-            "télécharge la vidéo en MP4 et s'occupe du reste."
+            "Téléchargez et organisez vos médias simplement — puis retrouvez-les "
+            "dans la bibliothèque et préparez vos projets sans risquer vos originaux."
         )
         self.hero_subtitle.setObjectName("heroSubtitle")
         self.hero_subtitle.setWordWrap(True)
-        left.addWidget(self.hero_title)
-        left.addWidget(self.hero_subtitle)
-        left.addSpacing(6)
+        welcome.addWidget(self.hero_subtitle)
+        header_row.addLayout(welcome, 1)
+        self.hero_art = HeroArt(self.tokens, 110)
+        header_row.addWidget(self.hero_art, 0, Qt.AlignmentFlag.AlignVCenter)
+        self._themed.append(self.hero_art)
+        hero_layout.addLayout(header_row)
+        hero_layout.addWidget(_divider())
 
+        composer_title = QLabel("Nouveau téléchargement")
+        composer_title.setObjectName("sectionTitle")
+        hero_layout.addWidget(composer_title)
+
+        def step_card(number: int, title: str, hint: str):
+            card = QFrame()
+            card.setObjectName("stepCard")
+            card_layout = QVBoxLayout(card)
+            card_layout.setContentsMargins(14, 12, 14, 12)
+            card_layout.setSpacing(9)
+            head = QHBoxLayout()
+            head.setSpacing(9)
+            badge = StepBadge(number, self.tokens, size=round(26 * self.scale))
+            self._themed.append(badge)
+            head.addWidget(badge, 0, Qt.AlignmentFlag.AlignVCenter)
+            texts = QVBoxLayout()
+            texts.setSpacing(1)
+            title_lbl = QLabel(title)
+            title_lbl.setObjectName("stepTitle")
+            texts.addWidget(title_lbl)
+            hint_lbl = QLabel(hint)
+            hint_lbl.setObjectName("stepHint")
+            hint_lbl.setWordWrap(True)
+            texts.addWidget(hint_lbl)
+            head.addLayout(texts, 1)
+            card_layout.addLayout(head)
+            hero_layout.addWidget(card)
+            return card_layout, badge
+
+        # Étape 1 — coller un lien.
+        step1_layout, self.step_link_badge = step_card(
+            1,
+            "Collez un lien",
+            "Vidéo YouTube publique ou adresse HTTP(S) directe vers un fichier. "
+            "Les vidéos privées, payantes ou protégées ne sont pas prises en charge.",
+        )
         composer = QHBoxLayout()
         composer.setSpacing(9)
         self.url_edit = QLineEdit()
@@ -987,43 +1095,35 @@ class OverloadWindow(QMainWindow):
         self.url_edit.textChanged.connect(self._schedule_validation)
         self.url_edit.returnPressed.connect(self.download_from_composer)
         composer.addWidget(self.url_edit, 1)
-
-        self.quality_combo = QComboBox()
-        for value, label in QUALITY_CHOICES:
-            self.quality_combo.addItem(label, value)
-        self.quality_combo.setMinimumHeight(round(48 * self.scale))
-        self.quality_combo.setMinimumWidth(round(172 * self.scale))
-        self.quality_combo.setToolTip(
-            "Qualité de la vidéo YouTube. Ignorée pour les fichiers directs."
-        )
-        composer.addWidget(self.quality_combo)
-
-        self.download_btn = QPushButton("Télécharger")
-        self.download_btn.setObjectName("primaryBtn")
-        self.download_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.download_btn.setMinimumHeight(round(48 * self.scale))
-        self.download_btn.setMinimumWidth(round(176 * self.scale))
-        self.download_btn.setIcon(icons.icon("download", self.tokens.accent_ink, 18, 2.0))
-        self.download_btn.setIconSize(QSize(18, 18))
-        self.download_btn.clicked.connect(self.download_from_composer)
-        composer.addWidget(self.download_btn)
-        left.addLayout(composer)
-
-        hint_row = QHBoxLayout()
-        hint_row.setSpacing(10)
+        self.paste_btn = QPushButton("Coller")
+        self.paste_btn.setObjectName("secondaryBtn")
+        self.paste_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.paste_btn.setMinimumHeight(round(48 * self.scale))
+        self.paste_btn.setIcon(icons.icon("clipboard", self.tokens.accent_text, 16))
+        self.paste_btn.setToolTip("Coller le lien depuis le presse-papiers")
+        self.paste_btn.clicked.connect(self.paste_clipboard)
+        composer.addWidget(self.paste_btn)
+        step1_layout.addLayout(composer)
         self.url_hint = QLabel(
-            "Liens YouTube et fichiers HTTP(S) directs pris en charge."
+            "Liens YouTube publics et fichiers HTTP(S) directs pris en charge."
         )
         self.url_hint.setObjectName("mutedLabel")
         self.url_hint.setWordWrap(True)
-        self.batch_link = QPushButton("Télécharger plusieurs liens")
-        self.batch_link.setObjectName("linkBtn")
-        self.batch_link.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.batch_link.clicked.connect(self.open_batch_dialog)
-        hint_row.addWidget(self.url_hint, 1)
-        hint_row.addWidget(self.batch_link, 0)
-        left.addLayout(hint_row)
+        step1_layout.addWidget(self.url_hint)
 
+        # Étape 2 — les options utiles.
+        step2_layout, _step2_badge = step_card(
+            2,
+            "Choisissez les options utiles",
+            "Uniquement ce qui change quelque chose pour ce téléchargement.",
+        )
+        options = QHBoxLayout()
+        options.setSpacing(16)
+        dest_col = QVBoxLayout()
+        dest_col.setSpacing(5)
+        dest_title = QLabel("Dossier de destination")
+        dest_title.setObjectName("fieldLabel")
+        dest_col.addWidget(dest_title)
         dest_row = QHBoxLayout()
         dest_row.setSpacing(7)
         folder_icon = QLabel()
@@ -1042,11 +1142,63 @@ class OverloadWindow(QMainWindow):
         dest_row.addWidget(self.dest_label, 1)
         dest_row.addWidget(change_dest)
         dest_row.addWidget(open_dest)
-        left.addLayout(dest_row)
-        hero_layout.addLayout(left, 1)
-        self.hero_art = HeroArt(self.tokens, 132)
-        hero_layout.addWidget(self.hero_art, 0, Qt.AlignmentFlag.AlignVCenter)
-        self._themed.append(self.hero_art)
+        dest_col.addLayout(dest_row)
+        dest_note = QLabel("Le fichier terminé apparaîtra aussi dans la Bibliothèque.")
+        dest_note.setObjectName("tinyLabel")
+        dest_col.addWidget(dest_note)
+        options.addLayout(dest_col, 3)
+
+        quality_col = QVBoxLayout()
+        quality_col.setSpacing(5)
+        quality_title = QLabel("Qualité vidéo (YouTube uniquement)")
+        quality_title.setObjectName("fieldLabel")
+        quality_col.addWidget(quality_title)
+        self.quality_combo = QComboBox()
+        for value, label in QUALITY_CHOICES:
+            self.quality_combo.addItem(label, value)
+        self.quality_combo.setMinimumHeight(round(38 * self.scale))
+        self.quality_combo.setToolTip(
+            "Qualité de la vidéo YouTube. Ignorée pour les fichiers directs, "
+            "déjà fournis tels quels par le serveur."
+        )
+        quality_col.addWidget(self.quality_combo)
+        quality_note = QLabel("Sans effet sur les fichiers directs.")
+        quality_note.setObjectName("tinyLabel")
+        quality_col.addWidget(quality_note)
+        options.addLayout(quality_col, 2)
+        step2_layout.addLayout(options)
+        self.batch_link = QPushButton("Ou télécharger plusieurs liens d'un coup (lot)")
+        self.batch_link.setObjectName("linkBtn")
+        self.batch_link.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.batch_link.clicked.connect(self.open_batch_dialog)
+        step2_layout.addWidget(self.batch_link, 0, Qt.AlignmentFlag.AlignLeft)
+
+        # Étape 3 — lancer, avec une progression honnête.
+        step3_layout, _step3_badge = step_card(
+            3,
+            "Lancez le téléchargement",
+            "La progression reflète les octets réellement écrits : « Terminé » "
+            "signifie fichier complet et vérifié, jamais un 100 % anticipé.",
+        )
+        launch_row = QHBoxLayout()
+        launch_row.setSpacing(10)
+        follow_hint = QLabel(
+            "Suivi en détail (vitesse, temps restant, pause/reprise) "
+            "dans la page Téléchargements."
+        )
+        follow_hint.setObjectName("mutedLabel")
+        follow_hint.setWordWrap(True)
+        launch_row.addWidget(follow_hint, 1)
+        self.download_btn = QPushButton("Télécharger")
+        self.download_btn.setObjectName("primaryBtn")
+        self.download_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.download_btn.setMinimumHeight(round(48 * self.scale))
+        self.download_btn.setMinimumWidth(round(190 * self.scale))
+        self.download_btn.setIcon(icons.icon("download", self.tokens.accent_ink, 18, 2.0))
+        self.download_btn.setIconSize(QSize(18, 18))
+        self.download_btn.clicked.connect(self.download_from_composer)
+        launch_row.addWidget(self.download_btn)
+        step3_layout.addLayout(launch_row)
         layout.addWidget(hero)
 
         stats = QWidget()
@@ -1080,12 +1232,12 @@ class OverloadWindow(QMainWindow):
         recent_layout.setContentsMargins(18, 16, 18, 16)
         recent_layout.setSpacing(9)
         header = QHBoxLayout()
-        recent_title = QLabel("Téléchargements récents")
+        recent_title = QLabel("Activité récente")
         recent_title.setObjectName("sectionTitle")
-        see_all = QPushButton("Tout voir")
+        see_all = QPushButton("Tout l'historique")
         see_all.setObjectName("linkBtn")
         see_all.setCursor(Qt.CursorShape.PointingHandCursor)
-        see_all.clicked.connect(lambda: self.go_to("downloads"))
+        see_all.clicked.connect(lambda: self.go_to("history"))
         header.addWidget(recent_title)
         header.addStretch()
         header.addWidget(see_all)
@@ -1097,7 +1249,7 @@ class OverloadWindow(QMainWindow):
         self.recent_list.addStretch()
         recent_layout.addWidget(self.recent_host, 1)
         self.recent_empty = QLabel(
-            "Vos prochains téléchargements apparaîtront ici, avec leur miniature et leur statut."
+            "Tes derniers fichiers apparaîtront ici, avec leur miniature et leur statut."
         )
         self.recent_empty.setObjectName("mutedLabel")
         self.recent_empty.setWordWrap(True)
@@ -1138,41 +1290,30 @@ class OverloadWindow(QMainWindow):
         queue_layout.addWidget(self.queue_empty)
         right.addWidget(queue_card)
 
-        promo = QFrame()
-        promo.setObjectName("promoCard")
-        promo_layout = QVBoxLayout(promo)
-        promo_layout.setContentsMargins(18, 16, 18, 16)
-        promo_layout.setSpacing(7)
-        promo_badge = GlyphBadge(
-            "film",
+        library_card = ToolCard(
+            "library",
+            "Bibliothèque",
+            "Retrouvez et ouvrez vos fichiers locaux en un clic.",
+            "Vidéos · audio · images · sous-titres",
             self.tokens,
-            size=36,
-            color=self.tokens.accent,
-            background=self.tokens.accent_soft,
+            on_click=lambda: self.go_to("library"),
+            scale=self.scale,
         )
-        promo_layout.addWidget(promo_badge)
-        promo_title = QLabel("Prêt à monter ?")
-        promo_title.setObjectName("sectionTitle")
-        promo_text = QLabel(
-            "Préparez un dossier de projet propre, importez vos rushs et renommez-les en lot."
+        library_card.setMinimumHeight(round(96 * self.scale))
+        creators_card = ToolCard(
+            "film",
+            "Espace Créateurs",
+            "Préparez un projet de montage propre, sans toucher aux originaux.",
+            "Projets · analyse · sous-titres · renommage",
+            self.tokens,
+            on_click=lambda: self.go_to("creators"),
+            scale=self.scale,
         )
-        promo_text.setObjectName("mutedLabel")
-        promo_text.setWordWrap(True)
-        promo_btn = QPushButton("Ouvrir l'espace Créateurs")
-        promo_btn.setObjectName("secondaryBtn")
-        promo_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        promo_btn.clicked.connect(lambda: self.go_to("creators"))
-        promo_layout.addWidget(promo_title)
-        promo_layout.addWidget(promo_text)
-        promo_layout.addSpacing(2)
-        promo_layout.addWidget(promo_btn)
-        promo_layout.addWidget(_divider())
-        analyze_btn = QPushButton("Analyser un média")
-        analyze_btn.setObjectName("ghostBtn")
-        analyze_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        analyze_btn.clicked.connect(lambda: self.go_to("analyzer"))
-        promo_layout.addWidget(analyze_btn)
-        right.addWidget(promo)
+        creators_card.setMinimumHeight(round(96 * self.scale))
+        self._tool_cards.extend([library_card, creators_card])
+        self._themed.extend([library_card, creators_card])
+        right.addWidget(library_card)
+        right.addWidget(creators_card)
         right.addStretch()
         bottom.addLayout(right, 2)
         layout.addLayout(bottom)
@@ -1191,11 +1332,9 @@ class OverloadWindow(QMainWindow):
 
         toolbar = QHBoxLayout()
         toolbar.setSpacing(8)
-        self.downloads_view = SegmentedControl(
-            [("active", "Téléchargements"), ("history", "Historique")], self.tokens
-        )
-        self.downloads_view.value_changed.connect(self._switch_downloads_view)
-        toolbar.addWidget(self.downloads_view)
+        self.downloads_summary = QLabel("Aucune tâche pour le moment.")
+        self.downloads_summary.setObjectName("cardTitle")
+        toolbar.addWidget(self.downloads_summary)
         toolbar.addStretch()
         self.pause_all_btn = IconButton("pause", "Tout suspendre", self.tokens)
         self.resume_all_btn = IconButton("play", "Tout reprendre", self.tokens)
@@ -1211,22 +1350,21 @@ class OverloadWindow(QMainWindow):
         self.batch_btn = QPushButton("Lot de liens")
         self.batch_btn.setObjectName("secondaryBtn")
         self.batch_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.batch_btn.setIcon(icons.icon("list", self.tokens.accent, 16))
+        self.batch_btn.setIcon(icons.icon("list", self.tokens.accent_text, 16))
         self.batch_btn.clicked.connect(self.open_batch_dialog)
+        self.history_link_btn = QPushButton("Historique")
+        self.history_link_btn.setObjectName("ghostBtn")
+        self.history_link_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.history_link_btn.setIcon(icons.icon("history", self.tokens.text_secondary, 16))
+        self.history_link_btn.clicked.connect(lambda: self.go_to("history"))
         toolbar.addWidget(self.pause_all_btn)
         toolbar.addWidget(self.resume_all_btn)
         toolbar.addWidget(self.clear_done_btn)
         toolbar.addWidget(self.batch_btn)
+        toolbar.addWidget(self.history_link_btn)
         self._themed.extend([self.pause_all_btn, self.resume_all_btn, self.clear_done_btn])
         layout.addLayout(toolbar)
 
-        self.downloads_stack = QStackedWidget()
-        layout.addWidget(self.downloads_stack, 1)
-
-        active = QWidget()
-        active_layout = QVBoxLayout(active)
-        active_layout.setContentsMargins(0, 0, 0, 0)
-        active_layout.setSpacing(10)
         filters_row = QHBoxLayout()
         self.filters = SegmentedControl(
             [
@@ -1244,7 +1382,16 @@ class OverloadWindow(QMainWindow):
         self.active_count = QLabel("")
         self.active_count.setObjectName("mutedLabel")
         filters_row.addWidget(self.active_count)
-        active_layout.addLayout(filters_row)
+        layout.addLayout(filters_row)
+
+        honesty = QLabel(
+            "Chaque carte indique un statut explicite et ses actions (pause, reprise, "
+            "relance, annulation, ouverture du fichier ou du dossier). La progression "
+            "reflète les données réelles du moteur : 100 % = terminé et vérifié."
+        )
+        honesty.setObjectName("tinyLabel")
+        honesty.setWordWrap(True)
+        layout.addWidget(honesty)
 
         active_scroll = QScrollArea()
         active_scroll.setWidgetResizable(True)
@@ -1265,32 +1412,48 @@ class OverloadWindow(QMainWindow):
         self.active_list.addWidget(self.active_empty)
         self.active_list.addStretch()
         self._themed.append(self.active_empty)
-        active_layout.addWidget(active_scroll, 1)
-        self.downloads_stack.addWidget(active)
+        layout.addWidget(active_scroll, 1)
+        return page
 
-        history = QWidget()
-        history_layout = QVBoxLayout(history)
-        history_layout.setContentsMargins(0, 0, 0, 0)
-        history_layout.setSpacing(10)
-        history_toolbar = QHBoxLayout()
-        history_toolbar.setSpacing(8)
+    # ------------------------------------------------------------------
+    # Historique
+    # ------------------------------------------------------------------
+    def _build_history_page(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(26, 18, 26, 22)
+        layout.setSpacing(12)
+
+        toolbar = QHBoxLayout()
+        toolbar.setSpacing(8)
+        self.history_summary = QLabel("Aucun téléchargement passé pour le moment.")
+        self.history_summary.setObjectName("cardTitle")
+        toolbar.addWidget(self.history_summary)
+        toolbar.addStretch()
         self.history_status = QComboBox()
         self.history_status.addItem("Toutes les entrées", "all")
         self.history_status.addItem("Terminés", "completed")
         self.history_status.addItem("Interrompus", "failed")
         self.history_status.addItem("Annulés", "cancelled")
         self.history_status.currentIndexChanged.connect(self._set_history_filter)
+        toolbar.addWidget(self.history_status)
         self.history_count = QLabel("")
         self.history_count.setObjectName("mutedLabel")
+        toolbar.addWidget(self.history_count)
         self.clear_history_btn = QPushButton("Effacer l'historique")
         self.clear_history_btn.setObjectName("ghostBtn")
         self.clear_history_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.clear_history_btn.clicked.connect(self._clear_history)
-        history_toolbar.addWidget(self.history_status)
-        history_toolbar.addWidget(self.history_count)
-        history_toolbar.addStretch()
-        history_toolbar.addWidget(self.clear_history_btn)
-        history_layout.addLayout(history_toolbar)
+        toolbar.addWidget(self.clear_history_btn)
+        layout.addLayout(toolbar)
+
+        note = QLabel(
+            "La présence réelle de chaque fichier est revérifiée sur le disque. "
+            "Effacer l'historique ne supprime jamais vos fichiers."
+        )
+        note.setObjectName("tinyLabel")
+        note.setWordWrap(True)
+        layout.addWidget(note)
 
         history_scroll = QScrollArea()
         history_scroll.setWidgetResizable(True)
@@ -1302,7 +1465,7 @@ class OverloadWindow(QMainWindow):
         self.history_list.setSpacing(6)
         self.history_empty = EmptyState(
             self.tokens,
-            "clock",
+            "history",
             "Historique vide",
             "Les téléchargements terminés ou interrompus seront conservés ici, "
             "même après la fermeture d'OverLoad.",
@@ -1310,12 +1473,226 @@ class OverloadWindow(QMainWindow):
         self.history_list.addWidget(self.history_empty)
         self.history_list.addStretch()
         self._themed.append(self.history_empty)
-        history_layout.addWidget(history_scroll, 1)
-        self.downloads_stack.addWidget(history)
+        layout.addWidget(history_scroll, 1)
         return page
 
     # ------------------------------------------------------------------
-    # Créateurs / Analyse
+    # Bibliothèque
+    # ------------------------------------------------------------------
+    def _build_library_page(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(26, 18, 26, 22)
+        layout.setSpacing(12)
+
+        toolbar = QHBoxLayout()
+        toolbar.setSpacing(8)
+        folder_icon = QLabel()
+        folder_icon.setPixmap(icons.pixmap("folder", self.tokens.text_muted, 16))
+        toolbar.addWidget(folder_icon)
+        self.library_root_label = ElidedLabel("")
+        self.library_root_label.setObjectName("cardTitle")
+        toolbar.addWidget(self.library_root_label, 1)
+        self.library_browse_btn = QPushButton("Parcourir un autre dossier…")
+        self.library_browse_btn.setObjectName("ghostBtn")
+        self.library_browse_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.library_browse_btn.clicked.connect(self.choose_library_folder)
+        toolbar.addWidget(self.library_browse_btn)
+        self.library_refresh_btn = IconButton(
+            "refresh", "Réanalyser le dossier", self.tokens
+        )
+        self.library_refresh_btn.clicked.connect(lambda: self.refresh_library(force=True))
+        toolbar.addWidget(self.library_refresh_btn)
+        self.library_open_btn = IconButton(
+            "external", "Ouvrir le dossier dans l'Explorateur", self.tokens
+        )
+        self.library_open_btn.clicked.connect(
+            lambda: self.safe_call(lambda: open_folder(self._library_current_root()))
+        )
+        toolbar.addWidget(self.library_open_btn)
+        self._themed.extend([self.library_refresh_btn, self.library_open_btn])
+        layout.addLayout(toolbar)
+
+        self.library_stats = QLabel("Analyse du dossier en cours…")
+        self.library_stats.setObjectName("mutedLabel")
+        layout.addWidget(self.library_stats)
+
+        filters_row = QHBoxLayout()
+        filters_row.setSpacing(8)
+        self.library_filters = SegmentedControl(KIND_FILTERS, self.tokens)
+        self.library_filters.value_changed.connect(self._set_library_filter)
+        filters_row.addWidget(self.library_filters)
+        filters_row.addStretch()
+        sort_label = QLabel("Trier :")
+        sort_label.setObjectName("fieldLabel")
+        filters_row.addWidget(sort_label)
+        self.library_sort_combo = QComboBox()
+        for value, label in SORTS:
+            self.library_sort_combo.addItem(label, value)
+        self.library_sort_combo.currentIndexChanged.connect(self._set_library_sort)
+        filters_row.addWidget(self.library_sort_combo)
+        layout.addLayout(filters_row)
+
+        library_scroll = QScrollArea()
+        library_scroll.setWidgetResizable(True)
+        library_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        library_host = QWidget()
+        library_scroll.setWidget(library_host)
+        self.library_list = QVBoxLayout(library_host)
+        self.library_list.setContentsMargins(0, 0, 4, 0)
+        self.library_list.setSpacing(6)
+        self.library_empty = EmptyState(
+            self.tokens,
+            "library",
+            "Bibliothèque vide",
+            "Téléchargez un premier fichier depuis l'accueil, ou parcourez "
+            "un dossier qui contient déjà vos médias.",
+            action_text="Nouveau téléchargement",
+            on_action=self.focus_composer,
+        )
+        self.library_list.addWidget(self.library_empty)
+        self.library_list.addStretch()
+        self._themed.append(self.library_empty)
+        layout.addWidget(library_scroll, 1)
+
+        self.library_more = QLabel("")
+        self.library_more.setObjectName("tinyLabel")
+        self.library_more.setWordWrap(True)
+        layout.addWidget(self.library_more)
+        return page
+
+    def _library_current_root(self) -> Path:
+        if self._library_root is not None:
+            return self._library_root
+        return Path(self.manager.settings().destination_dir)
+
+    def choose_library_folder(self) -> None:
+        folder = choose_directory(
+            self, "Dossier à afficher dans la bibliothèque", preferred=self._library_current_root()
+        )
+        if folder:
+            self._library_root = Path(folder)
+            self._library_dirty = True
+            self.refresh_library(force=True)
+
+    def refresh_library(self, *, force: bool = False) -> None:
+        """(Ré)indexe le dossier de la bibliothèque en arrière-plan si nécessaire."""
+        root = self._library_current_root()
+        self.library_root_label.setText(str(root))
+        if self._library_scanning:
+            return
+        if not force and not self._library_dirty and self._library_scan is not None:
+            if self._library_scan.root == root:
+                return
+        self._library_scanning = True
+        self._library_dirty = False
+        self.library_stats.setText("Analyse du dossier en cours…")
+        self._library_probe.start(root)
+
+    def _on_library_scan(self, scan: object, error: object) -> None:
+        self._library_scanning = False
+        if error or not isinstance(scan, LibraryScan):
+            self.library_stats.setText(f"Analyse impossible : {error}")
+            self._library_scan = None
+            self._render_library()
+            return
+        self._library_scan = scan
+        self._render_library()
+
+    def _set_library_filter(self, value: str) -> None:
+        self._library_filter = value
+        self._render_library()
+
+    def _set_library_sort(self, _index: int) -> None:
+        self._library_sort = str(self.library_sort_combo.currentData())
+        self._render_library()
+
+    def _render_library(self) -> None:
+        scan = self._library_scan
+        _clear_rows(self.library_list)
+        self._library_rows = []
+        if scan is None:
+            self.library_empty.set_texts(
+                "Dossier illisible",
+                "Impossible d'analyser ce dossier. Vérifiez qu'il existe encore "
+                "ou parcourez-en un autre.",
+                "Nouveau téléchargement",
+            )
+            self.library_empty.show()
+            self.library_more.setText("")
+            return
+        counts = scan.counts()
+        total = len(scan.files)
+        label_by_kind = dict(KIND_FILTERS)
+        parts = [
+            f"{counts[k]} {label_by_kind.get(k, k).lower()}"
+            for k in ("video", "audio", "image", "subtitle")
+            if counts.get(k)
+        ]
+        self.library_stats.setText(
+            f"{total} fichier(s) · {format_bytes(scan.total_size)} au total"
+            + (f" — {' · '.join(parts)}" if parts else "")
+        )
+        query = self._search if self._current_page == "library" else ""
+        visible = filter_files(
+            scan.files, kind=self._library_filter, query=query, sort=self._library_sort
+        )
+        sources = {
+            entry.destination_path: entry.url for entry in self._history_all if entry.url
+        }
+        shown = visible[:300]
+        for index, item in enumerate(shown):
+            row = LibraryRow(
+                item,
+                self.tokens,
+                self.thumbnails,
+                source_url=sources.get(str(item.path), ""),
+                on_open_file=lambda target: self.safe_call(lambda: open_file(target.path)),
+                on_open_folder=lambda target: self.safe_call(lambda: open_folder(target.path)),
+                on_analyze=lambda target: self.analyze_path(target.path),
+                scale=self.scale,
+            )
+            self.library_list.insertWidget(index, row)
+            self._library_rows.append(row)
+        self.library_empty.setVisible(not visible)
+        if total and not visible:
+            self.library_empty.set_texts(
+                "Aucun résultat",
+                "Aucun fichier ne correspond à ce type ou à votre recherche "
+                "dans ce dossier.",
+            )
+        else:
+            self.library_empty.set_texts(
+                "Bibliothèque vide",
+                "Téléchargez un premier fichier depuis l'accueil, ou parcourez "
+                "un dossier qui contient déjà vos médias.",
+                "Nouveau téléchargement",
+            )
+        notes = []
+        if len(visible) > len(shown):
+            notes.append(
+                f"{len(shown)} fichiers affichés sur {len(visible)}"
+                " — affinez le filtre ou la recherche."
+            )
+        if scan.truncated:
+            notes.append("Dossier très volumineux : seuls les premiers fichiers sont indexés.")
+        if scan.unreadable:
+            notes.append(f"{scan.unreadable} fichier(s) illisible(s) ignoré(s).")
+        self.library_more.setText(" ".join(notes))
+
+    def analyze_path(self, path: Path | str) -> None:
+        """Ouvre l'analyse de fichier des Créateurs sur le fichier demandé."""
+        self.go_to("creators", focus=False)
+        widget = getattr(self, "creators_widget", None)
+        if widget is not None and hasattr(widget, "show_tool"):
+            widget.show_tool("analyze")
+            analyzer = getattr(widget, "analyzer", None)
+            if analyzer is not None and hasattr(analyzer, "set_file"):
+                analyzer.set_file(str(path))
+        self.toast("Fichier prêt à analyser dans l'espace Créateurs.")
+
+    # ------------------------------------------------------------------
+    # Créateurs / Aide
     # ------------------------------------------------------------------
     def _build_creators_page(self) -> QWidget:
         from overload.ui.creators import SAFETY_NOTE, create_creators_widget
@@ -1332,41 +1709,305 @@ class OverloadWindow(QMainWindow):
             title="Vos fichiers d'origine sont protégés",
         )
         layout.addWidget(banner)
+
         self.creators_widget = create_creators_widget(
             history=self.history, data_dir=self.data_dir, embedded=True
         )
+        show_tool = getattr(self.creators_widget, "show_tool", lambda _key: None)
+
+        hub = QFrame()
+        hub.setObjectName("panelCard")
+        hub_layout = QVBoxLayout(hub)
+        hub_layout.setContentsMargins(14, 12, 14, 12)
+        hub_layout.setSpacing(10)
+        hub_header = QHBoxLayout()
+        hub_title = QLabel("Que voulez-vous faire ?")
+        hub_title.setObjectName("sectionTitle")
+        hub_header.addWidget(hub_title)
+        hub_header.addStretch()
+        hub_hint = QLabel("Chaque outil explique son effet avant d'agir.")
+        hub_hint.setObjectName("tinyLabel")
+        hub_header.addWidget(hub_hint)
+        self.hub_toggle = QPushButton("Réduire")
+        self.hub_toggle.setObjectName("linkBtn")
+        self.hub_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        hub_header.addWidget(self.hub_toggle)
+        hub_layout.addLayout(hub_header)
+
+        self.hub_grid_host = QWidget()
+        grid = QGridLayout(self.hub_grid_host)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(10)
+        tools = [
+            (
+                "prepare", "layers", "Préparer un projet",
+                "Rassemblez vos médias dispersés dans un dossier de projet rangé.",
+                "Fichiers ou dossiers entiers · copies uniquement",
+            ),
+            (
+                "projects", "folder", "Mes projets",
+                "Créez l'arborescence d'un projet selon votre logiciel de montage.",
+                "Un dossier existant est complété, jamais vidé",
+            ),
+            (
+                "analyze", "monitor", "Analyser un fichier",
+                "Format, résolution, durée, codecs et pistes d'un média local.",
+                "Vidéo/audio local · lecture seule, 100 % hors ligne",
+            ),
+            (
+                "premiere", "check", "Vérifier pour Premiere Pro",
+                "Contrôlez la compatibilité avant import et repérez les risques.",
+                "Signale les problèmes · ne convertit ni ne modifie rien",
+            ),
+            (
+                "tracks", "captions", "Sous-titres et pistes",
+                "Listez les pistes, extrayez un .srt ou un .wav, créez un modèle.",
+                "Le fichier source n'est jamais modifié",
+            ),
+            (
+                "rename", "edit", "Renommer par lots",
+                "Renommez des copies selon un modèle, avec aperçu en direct.",
+                "Aperçu avant écriture · jamais d'écrasement",
+            ),
+            (
+                "inventory", "list", "Inventaire et export",
+                "Listez sources, codecs et caractéristiques, exportez en CSV.",
+                "CSV prêt pour Excel · analyse en lecture seule",
+            ),
+            (
+                "profiles", "sliders", "Profils de montage",
+                "Premiere Pro, DaVinci Resolve, CapCut… et vos profils maison.",
+                "Structures et formats recommandés par logiciel",
+            ),
+        ]
+        for index, (key, icon_name, title, text, meta) in enumerate(tools):
+            card = ToolCard(
+                icon_name,
+                title,
+                text,
+                meta,
+                self.tokens,
+                on_click=lambda _checked=False, k=key: show_tool(k),
+                scale=self.scale,
+            )
+            card.setMinimumHeight(round(112 * self.scale))
+            grid.addWidget(card, index // 4, index % 4)
+            self._tool_cards.append(card)
+            self._themed.append(card)
+        for column in range(4):
+            grid.setColumnStretch(column, 1)
+        hub_layout.addWidget(self.hub_grid_host)
+
+        def toggle_hub() -> None:
+            visible = not self.hub_grid_host.isVisible()
+            self.hub_grid_host.setVisible(visible)
+            self.hub_toggle.setText("Réduire" if visible else "Afficher les outils")
+
+        self.hub_toggle.clicked.connect(toggle_hub)
+        layout.addWidget(hub)
         layout.addWidget(self.creators_widget, 1)
         return page
 
-    def _build_analyzer_page(self) -> QWidget:
-        from overload.ui.analyzer import create_analyzer_widget
+    def _build_help_page(self) -> QWidget:
+        scroll, layout = self._scroll_page()
 
-        page = QWidget()
-        layout = QVBoxLayout(page)
-        layout.setContentsMargins(26, 18, 26, 20)
-        layout.setSpacing(12)
-        layout.addWidget(
-            InfoBanner(
-                self.tokens,
-                "monitor",
-                "Analyse locale, sans aucun envoi sur Internet. La vérification complète peut "
-                "prendre jusqu'à 10 minutes ; les alertes de compatibilité sont indicatives.",
-                kind="info",
-                title="Inspecter avant de monter",
-            )
+        def card(title: str):
+            frame = QFrame()
+            frame.setObjectName("panelCard")
+            inner = QVBoxLayout(frame)
+            inner.setContentsMargins(18, 16, 18, 16)
+            inner.setSpacing(9)
+            title_lbl = QLabel(title)
+            title_lbl.setObjectName("sectionTitle")
+            inner.addWidget(title_lbl)
+            layout.addWidget(frame)
+            return inner
+
+        def paragraph(parent_layout, text: str, *, style: str = "mutedLabel") -> QLabel:
+            label = QLabel(text)
+            label.setObjectName(style)
+            label.setWordWrap(True)
+            parent_layout.addWidget(label)
+            return label
+
+        start = card("Démarrage rapide")
+        for number, title, text in (
+            (
+                1,
+                "Collez un lien",
+                "Depuis l'accueil : vidéo YouTube publique ou adresse directe "
+                "vers un fichier. Le bouton Coller récupère le presse-papiers.",
+            ),
+            (
+                2,
+                "Choisissez les options utiles",
+                "Dossier de destination, qualité vidéo pour YouTube. "
+                "C'est tout — le reste est automatique.",
+            ),
+            (
+                3,
+                "Lancez et suivez",
+                "Progression réelle, vitesse et temps restant dans "
+                "Téléchargements. Le fichier terminé se retrouve dans la Bibliothèque.",
+            ),
+        ):
+            row = QHBoxLayout()
+            row.setSpacing(9)
+            badge = StepBadge(number, self.tokens, size=24)
+            self._themed.append(badge)
+            row.addWidget(badge, 0, Qt.AlignmentFlag.AlignTop)
+            col = QVBoxLayout()
+            col.setSpacing(1)
+            step_title = QLabel(title)
+            step_title.setObjectName("stepTitle")
+            col.addWidget(step_title)
+            paragraph(col, text)
+            row.addLayout(col, 1)
+            start.addLayout(row)
+        go_btn = QPushButton("Nouveau téléchargement")
+        go_btn.setObjectName("primaryBtn")
+        go_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        go_btn.setIcon(icons.icon("download", self.tokens.accent_ink, 16, 2.0))
+        go_btn.clicked.connect(self.focus_composer)
+        start.addWidget(go_btn, 0, Qt.AlignmentFlag.AlignLeft)
+
+        sources = card("Sources prises en charge")
+        paragraph(
+            sources,
+            "Prises en charge : vidéos YouTube publiques (youtube.com/watch?v=…, "
+            "youtu.be/…, youtube.com/shorts/…), téléchargées en MP4 H.264/AAC quand "
+            "YouTube fournit ces flux, et adresses HTTP(S) pointant directement "
+            "vers un fichier (vidéo, audio, image, archive…).",
         )
-        panel = QFrame()
-        panel.setObjectName("panelCard")
-        panel_layout = QVBoxLayout(panel)
-        panel_layout.setContentsMargins(16, 14, 16, 14)
-        panel_layout.addWidget(create_analyzer_widget())
-        layout.addWidget(panel, 1)
-        return page
+        paragraph(
+            sources,
+            "Non prises en charge : vidéos privées, réservées aux membres, "
+            "soumises à un contrôle d'âge ou protégées (DRM), et pages web qui ne "
+            "sont pas des fichiers. OverLoad ne se connecte à aucun compte et ne "
+            "contourne aucune protection : dans ces cas, le lien est refusé avec "
+            "une explication. Téléchargez uniquement ce que vous êtes autorisé "
+            "à enregistrer.",
+        )
+
+        faq = card("Dépannage")
+        questions = [
+            (
+                "Mon lien est refusé, pourquoi ?",
+                "Le champ de l'accueil explique la raison sous le lien (adresse "
+                "invalide, source non prise en charge, fichier déjà présent…). "
+                "Vérifiez que le lien pointe vers une vidéo YouTube publique ou "
+                "directement vers un fichier.",
+                "Retour à l'accueil", "home",
+            ),
+            (
+                "Un téléchargement s'est interrompu.",
+                "La carte de la tâche donne la cause probable et l'action "
+                "recommandée. Utilisez Relancer : quand le serveur l'autorise, "
+                "OverLoad reprend depuis le fichier partiel au lieu de tout "
+                "recommencer.",
+                "Ouvrir Téléchargements", "downloads",
+            ),
+            (
+                "Où est passé mon fichier terminé ?",
+                "Il est dans le dossier de destination (visible à l'étape 2 de "
+                "l'accueil). Retrouvez-le dans la Bibliothèque, ou via "
+                "l'Historique qui revérifie sa présence réelle sur le disque.",
+                "Ouvrir la Bibliothèque", "library",
+            ),
+            (
+                "Premiere Pro refuse ou lit mal ma vidéo.",
+                "Analysez le fichier dans l'espace Créateurs : codec rare, "
+                "cadence variable ou conteneur peu accepté y sont signalés avec "
+                "des explications. OverLoad ne convertit jamais l'original en "
+                "silence : à vous de décider ensuite.",
+                "Analyser un fichier", "analyzer",
+            ),
+            (
+                "C'est lent, ou je veux limiter la bande passante.",
+                "Paramètres permet de limiter le débit global et le nombre de "
+                "téléchargements simultanés, à chaud, sans relancer les tâches.",
+                "Ouvrir Paramètres", "settings",
+            ),
+        ]
+        for question, answer, action, target in questions:
+            question_lbl = QLabel(question)
+            question_lbl.setObjectName("helpQuestion")
+            faq.addWidget(question_lbl)
+            paragraph(faq, answer)
+            link = QPushButton(action)
+            link.setObjectName("linkBtn")
+            link.setCursor(Qt.CursorShape.PointingHandCursor)
+            link.clicked.connect(lambda _checked=False, k=target: self.go_to(k))
+            faq.addWidget(link, 0, Qt.AlignmentFlag.AlignLeft)
+
+        shortcuts = card("Raccourcis clavier")
+        for keys, action in (
+            ("Ctrl+L", "Aller au champ de lien (nouveau téléchargement)"),
+            ("Ctrl+F", "Rechercher dans les téléchargements, l'historique ou la bibliothèque"),
+            ("Ctrl+V", "Coller un lien dans le champ de l'accueil"),
+            ("Entrée", "Lancer le téléchargement depuis le champ de lien"),
+            (
+                "Ctrl+1 … Ctrl+7",
+                "Naviguer : Accueil, Téléchargements, Bibliothèque, Créateurs, "
+                "Historique, Paramètres, Aide",
+            ),
+        ):
+            row = QHBoxLayout()
+            key_lbl = QLabel(keys)
+            key_lbl.setObjectName("formatChip")
+            row.addWidget(key_lbl, 0)
+            action_lbl = QLabel(action)
+            action_lbl.setObjectName("mutedLabel")
+            action_lbl.setWordWrap(True)
+            row.addWidget(action_lbl, 1)
+            shortcuts.addLayout(row)
+
+        about = card("À propos")
+        paragraph(
+            about,
+            f"OverLoad {__version__} — Media Manager. Téléchargez, organisez et "
+            "préparez vos médias dans une application Windows sobre : vert forêt "
+            "naturel, statuts explicites, originaux toujours préservés. "
+            "Licence MIT ; composants tiers détaillés dans "
+            "THIRD_PARTY_LICENSES.md, livré avec l'application (Qt/PySide6, "
+            "yt-dlp, FFmpeg/FFprobe LGPL).",
+        )
+        about_row = QHBoxLayout()
+        data_btn = QPushButton("Dossier de données")
+        data_btn.setObjectName("secondaryBtn")
+        data_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        data_btn.clicked.connect(self.open_data_dir)
+        about_row.addWidget(data_btn)
+        dest_btn = QPushButton("Dossier de destination")
+        dest_btn.setObjectName("secondaryBtn")
+        dest_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        dest_btn.clicked.connect(
+            lambda: self.safe_call(self.manager.open_downloads_folder)
+        )
+        about_row.addWidget(dest_btn)
+        repo_btn = QPushButton("Code source (GitHub)")
+        repo_btn.setObjectName("ghostBtn")
+        repo_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        repo_btn.clicked.connect(
+            lambda: webbrowser.open("https://github.com/TOFazer/OverLoad")
+        )
+        about_row.addWidget(repo_btn)
+        about_row.addStretch()
+        about.addLayout(about_row)
+
+        layout.addStretch()
+        return scroll
 
     # ------------------------------------------------------------------
     # Navigation et apparence
     # ------------------------------------------------------------------
     def go_to(self, key: str, *, focus: bool = True) -> None:
+        # Compatibilité v1.x : l'analyse multimédia vit désormais dans
+        # l'espace Créateurs, avec les autres outils de montage.
+        analyze_after = key == "analyzer"
+        if analyze_after:
+            key = "creators"
         if key not in self._pages:
             return
         page = self._pages[key]
@@ -1379,7 +2020,7 @@ class OverloadWindow(QMainWindow):
         self.page_title.setText(title)
         self.page_subtitle.setText(subtitle)
         colors = {
-            "accent": (self.tokens.accent, self.tokens.accent_soft),
+            "accent": (self.tokens.accent_text, self.tokens.accent_soft),
             "info": (self.tokens.info, self.tokens.info_soft),
             "success": (self.tokens.success, self.tokens.success_soft),
             "warning": (self.tokens.warning, self.tokens.warning_soft),
@@ -1388,11 +2029,21 @@ class OverloadWindow(QMainWindow):
         self.page_badge.refresh_theme(self.tokens, fg, bg)
         self.page_badge.set_icon(icon_name)
         self.new_btn.setVisible(key != "home")
-        self.search_edit.setPlaceholderText(
-            "Rechercher un fichier…" if key == "downloads" else "Rechercher…"
-        )
+        placeholders = {
+            "downloads": "Rechercher un téléchargement…",
+            "history": "Rechercher dans l'historique…",
+            "library": "Rechercher un fichier local…",
+        }
+        self.search_edit.setPlaceholderText(placeholders.get(key, "Rechercher…"))
         if key == "settings" and isinstance(page, SettingsPage):
             page.refresh_from_prefs()
+        if key == "library":
+            self.refresh_library()
+            self._render_library()
+        if analyze_after:
+            widget = getattr(self, "creators_widget", None)
+            if widget is not None and hasattr(widget, "show_tool"):
+                widget.show_tool("analyze")
         if key == "home" and focus:
             QTimer.singleShot(80, self.url_edit.setFocus)
 
@@ -1452,13 +2103,21 @@ class OverloadWindow(QMainWindow):
             row.refresh_theme(self.tokens)
         for row in self._queue_rows:
             row.refresh_theme(self.tokens)
+        for row in self._library_rows:
+            row.refresh_theme(self.tokens)
         self.page_badge.refresh_theme(self.tokens)
         self.theme_btn.set_icon_name("sun" if self.tokens.dark else "moon")
         self.theme_btn.refresh_theme(self.tokens)
         self.settings_btn.refresh_theme(self.tokens)
         self.new_btn.setIcon(icons.icon("download", self.tokens.accent_ink, 16, 2.0))
         self.download_btn.setIcon(icons.icon("download", self.tokens.accent_ink, 18, 2.0))
-        self.batch_btn.setIcon(icons.icon("list", self.tokens.accent, 16))
+        self.batch_btn.setIcon(icons.icon("list", self.tokens.accent_text, 16))
+        if hasattr(self, "paste_btn"):
+            self.paste_btn.setIcon(icons.icon("clipboard", self.tokens.accent_text, 16))
+        if hasattr(self, "history_link_btn"):
+            self.history_link_btn.setIcon(
+                icons.icon("history", self.tokens.text_secondary, 16)
+            )
         self._search_icon = icons.icon("search", self.tokens.text_muted, 16)
         self._search_action.setIcon(self._search_icon)
         self._paste_action.setIcon(icons.icon("copy", self.tokens.text_muted, 16))
@@ -1468,7 +2127,7 @@ class OverloadWindow(QMainWindow):
         self._queue_sig = None
         self._history_sig = None
         self._apply_responsive()
-        self._refresh_downloads()
+        self._refresh_history()
 
     def toggle_theme(self) -> None:
         self.set_appearance(theme="light" if self.tokens.dark else "dark")
@@ -1541,6 +2200,8 @@ class OverloadWindow(QMainWindow):
         self._validate_timer.start()
 
     def _set_url_state(self, state: str) -> None:
+        if hasattr(self, "step_link_badge"):
+            self.step_link_badge.set_done(state == "valid")
         self.url_edit.setProperty("invalid", state == "invalid")
         self.url_edit.setProperty("valid", state == "valid")
         self.url_edit.style().unpolish(self.url_edit)
@@ -1690,9 +2351,11 @@ class OverloadWindow(QMainWindow):
     def _on_search(self, text: str) -> None:
         cleaned = text.strip()
         self._search = cleaned
-        if cleaned and self._current_page != "downloads":
+        if cleaned and self._current_page not in {"downloads", "history", "library"}:
             self.go_to("downloads", focus=False)
-        self._refresh_downloads()
+        self._refresh_tasks(self.manager.list_tasks())
+        self._refresh_history()
+        self._render_library()
 
     # ------------------------------------------------------------------
     # Rafraîchissement
@@ -1704,7 +2367,9 @@ class OverloadWindow(QMainWindow):
         self._refresh_tasks(snapshots)
         self.maybe_reload_history()
         self._refresh_home()
-        self._refresh_downloads()
+        self._refresh_history()
+        if self._current_page == "library":
+            self.refresh_library()
         self._refresh_sidebar(snapshots)
 
     def _refresh_stats(self, snapshots) -> None:
@@ -1744,6 +2409,9 @@ class OverloadWindow(QMainWindow):
             self.sidebar_queue.setText(f"{active} actif(s) · {paused} en pause")
         else:
             self.sidebar_queue.setText("Aucune activité")
+        downloads_btn = self._nav_buttons.get("downloads")
+        if downloads_btn is not None:
+            downloads_btn.set_badge(active + paused)
 
     def _refresh_tasks(self, snapshots) -> None:
         query = self._search.casefold()
@@ -1825,6 +2493,14 @@ class OverloadWindow(QMainWindow):
         self.active_count.setText(
             f"{len(visible)} affiché(s) sur {len(snapshots)}" if snapshots else ""
         )
+        if hasattr(self, "downloads_summary"):
+            if snapshots:
+                self.downloads_summary.setText(
+                    f"{counts['running']} en cours · {counts['queued']} en attente · "
+                    f"{counts['paused']} en pause · {counts['failed']} problème(s)"
+                )
+            else:
+                self.downloads_summary.setText("Aucune tâche pour le moment.")
         if hasattr(self, "pause_all_btn"):
             self.pause_all_btn.setEnabled(counts["running"] + counts["queued"] > 0)
             self.resume_all_btn.setEnabled(counts["paused"] > 0)
@@ -1881,7 +2557,10 @@ class OverloadWindow(QMainWindow):
         if not force and now - self._last_history_at < 1.0:
             return
         self._last_history_at = now
+        previous_count = len(self._history_all)
         self._history_all = self.history.list_entries(limit=300)
+        if len(self._history_all) != previous_count:
+            self._library_dirty = True
         today = datetime.now(UTC).date()
         completed_today = 0
         for entry in self._history_all:
@@ -1900,7 +2579,7 @@ class OverloadWindow(QMainWindow):
             "today": completed_today,
         }
 
-    def _refresh_downloads(self) -> None:
+    def _refresh_history(self) -> None:
         query = self._search.casefold()
         filtered = [
             entry
@@ -1942,9 +2621,21 @@ class OverloadWindow(QMainWindow):
                     "même après la fermeture d'OverLoad.",
                 )
             self.history_count.setText(f"{len(filtered)} entrée(s)" if filtered else "")
-
-    def _switch_downloads_view(self, value: str) -> None:
-        self.downloads_stack.setCurrentIndex(0 if value == "active" else 1)
+            if hasattr(self, "history_summary"):
+                by_status = {"completed": 0, "failed": 0, "cancelled": 0}
+                for entry in self._history_all:
+                    if entry.status in by_status:
+                        by_status[entry.status] += 1
+                if self._history_all:
+                    self.history_summary.setText(
+                        f"{by_status['completed']} terminé(s) · "
+                        f"{by_status['failed']} interrompu(s) · "
+                        f"{by_status['cancelled']} annulé(s)"
+                    )
+                else:
+                    self.history_summary.setText(
+                        "Aucun téléchargement passé pour le moment."
+                    )
 
     def _set_filter(self, value: str) -> None:
         self._active_filter = value
@@ -1953,7 +2644,7 @@ class OverloadWindow(QMainWindow):
     def _set_history_filter(self, _index: int) -> None:
         self._history_filter = str(self.history_status.currentData())
         self._history_sig = None
-        self._refresh_downloads()
+        self._refresh_history()
 
     def _remove_history(self, entry_id: str) -> None:
         self.history.remove_entry(entry_id)
@@ -1978,7 +2669,7 @@ class OverloadWindow(QMainWindow):
 
     def _update_hero_title(self) -> None:
         self.hero_title.setText(
-            f'<span style="color:{self.tokens.accent};">Téléchargez.</span> Organisez. Créez.'
+            f'Tout commence <span style="color:{self.tokens.accent_text};">ici.</span>'
         )
 
     # ------------------------------------------------------------------
@@ -2039,6 +2730,11 @@ class OverloadWindow(QMainWindow):
         search_shortcut.activated.connect(self._focus_search)
         url_shortcut = QShortcut(QKeySequence("Ctrl+L"), self)
         url_shortcut.activated.connect(self.focus_composer)
+        self._nav_shortcuts: list[QShortcut] = []
+        for index, key in enumerate(NAV_ORDER, start=1):
+            shortcut = QShortcut(QKeySequence(f"Ctrl+{index}"), self)
+            shortcut.activated.connect(lambda k=key: self.go_to(k))
+            self._nav_shortcuts.append(shortcut)
 
     def _focus_search(self) -> None:
         self.search_edit.setFocus()

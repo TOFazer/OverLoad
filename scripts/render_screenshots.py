@@ -75,7 +75,7 @@ def _build_demo(tmp: Path):
 
     downloads = tmp / "OverLoad"
     downloads.mkdir(parents=True, exist_ok=True)
-    _make_image(downloads / "DSC_0421.jpg", "#52765B", "#14251B", "PHOTO 0421")
+    _make_image(downloads / "DSC_0421.jpg", "#315E43", "#101713", "PHOTO 0421")
     _make_image(downloads / "Moodboard ete.jpg", "#F43F5E", "#FBBF24", "MOODBOARD")
     (downloads / "Soundtrack - Nuit.wav").write_bytes(b"RIFF" + os.urandom(2_400_000))
     (downloads / "Rushes - sequence 04.mkv").write_bytes(os.urandom(120_000))
@@ -173,19 +173,29 @@ def main() -> int:
         window.go_to("downloads")
         shot("telechargements.png")
 
-        window.downloads_view.set_value("history", emit=True)
+        window.go_to("library")
+        library_deadline = time.monotonic() + 6
+        while time.monotonic() < library_deadline and len(window._library_rows) < 3:
+            app.processEvents()
+            time.sleep(0.05)
+        shot("bibliotheque.png")
+
+        window.go_to("history")
         shot("historique.png")
 
-        window.set_appearance(theme="light", accent="blue")
+        window.set_appearance(theme="light", accent="forest")
         window.go_to("home")
         shot("theme-clair.png")
 
-        window.set_appearance(theme="dark", accent="violet")
+        window.set_appearance(theme="dark", accent="forest")
         window.go_to("settings")
         shot("parametres.png")
 
         window.go_to("creators")
         shot("createurs.png")
+
+        window.go_to("help")
+        shot("aide.png")
 
         # Laisse Qt terminer les extractions de miniatures avant les captures finales.
         deadline = time.monotonic() + 6

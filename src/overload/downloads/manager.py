@@ -24,7 +24,7 @@ from urllib.parse import urlsplit
 
 from overload.core.errors import OverloadError
 from overload.core.formatting import format_speed
-from overload.core.paths import open_folder
+from overload.core.paths import open_file, open_folder
 from overload.downloads.bandwidth import BandwidthLimiter
 from overload.downloads.duplicates import (
     DuplicateDetectedError,
@@ -847,6 +847,18 @@ class DownloadManager:
         snap = self.get_task(task_id)
         return open_folder(snap.target_path, opener=opener)
 
+    def open_task_file(self, task_id: str, *, opener=None) -> Path:  # noqa: ANN001
+        """Ouvre le fichier d'une tâche terminée avec l'application par défaut."""
+        snap = self.get_task(task_id)
+        return open_file(snap.target_path, opener=opener)
+
+    def open_history_file(self, entry_id: str, *, opener=None) -> Path:  # noqa: ANN001
+        """Ouvre le fichier d'une entrée d'historique avec l'application par défaut."""
+        if self._history is None:
+            raise OverloadError("Aucun historique n'est configuré.")
+        entry: HistoryEntry = self._history.get_entry(entry_id)
+        return open_file(entry.destination_path, opener=opener)
+
     def open_history_folder(self, entry_id: str, *, opener=None) -> Path:  # noqa: ANN001
         if self._history is None:
             raise OverloadError("Aucun historique n'est configuré.")
@@ -1230,11 +1242,15 @@ class DownloadManager:
             else None
         )
 
+        # Progression honnête : 100 % est réservé aux tâches TERMINÉES, c'est-à-dire
+        # fichier complètement écrit sur le disque et validé (taille, puis FFprobe
+        # pour YouTube). Tant que la finalisation/vérification n'est pas achevée,
+        # on plafonne à 99,9 % pour ne jamais afficher un faux « 100 % ».
         progress_pct: float | None = None
         if task.state is TaskState.COMPLETED:
             progress_pct = 100.0
         elif task.total_bytes and task.total_bytes > 0:
-            progress_pct = min(100.0, (task.downloaded_bytes / task.total_bytes) * 100.0)
+            progress_pct = min(99.9, (task.downloaded_bytes / task.total_bytes) * 100.0)
 
         active_warning = ""
         if retrying:

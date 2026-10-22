@@ -31,6 +31,8 @@ a = Analysis(
         "overload.downloads.urls",
         "overload.downloads.youtube",
         "overload.history.store",
+        "overload.library",
+        "overload.library.scan",
         "overload.settings.store",
         "overload.ui.components",
         "overload.ui.desktop",

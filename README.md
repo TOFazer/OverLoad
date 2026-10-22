@@ -4,9 +4,60 @@
 
 🎬 Télécharge des vidéos YouTube et des fichiers depuis des adresses directes, retrouve tes vidéos, musiques et images, analyse-les, prépare tes projets de montage et organise tes médias, directement dans une **application native Windows (`OverLoad.exe`)** sans dépendance à installer.
 
-**Sources prises en charge (version 1.2) :** vidéos YouTube publiques (`youtube.com/watch?v=…`, `youtu.be/…`, `youtube.com/shorts/…`) et adresses HTTP(S) qui pointent directement vers un fichier. OverLoad ne contourne ni les protections d'accès, ni les DRM, ni les restrictions d'une plateforme : les vidéos privées, réservées aux membres ou soumises à un contrôle d'âge sont refusées avec un message explicite.
+**Sources prises en charge :** vidéos YouTube publiques (`youtube.com/watch?v=…`, `youtu.be/…`, `youtube.com/shorts/…`) et adresses HTTP(S) qui pointent directement vers un fichier. OverLoad ne contourne ni les protections d'accès, ni les DRM, ni les restrictions d'une plateforme : les vidéos privées, réservées aux membres ou soumises à un contrôle d'âge sont refusées avec un message explicite.
 
 **OverLoad — Your media, your way.**
+
+---
+
+## 🌲 OverLoad 2.0 — une vraie refonte, pensée pour l'usage quotidien
+
+OverX impressionne quand on le découvre ; OverLoad doit impressionner quand on
+l'**utilise**. La version 2.0 repart de cette idée : même famille visuelle
+(sombre, élégante, vert forêt naturel), mais une organisation entièrement
+repensée pour qu'on sache toujours où l'on est, où sont les fichiers et
+quoi faire ensuite.
+
+**Nouvelle identité, partout la même** (fenêtre native, installateur,
+interface web de secours) :
+
+| Rôle | Couleur |
+| --- | --- |
+| Fond principal — vert-noir profond | `#101713` |
+| Panneaux — navigation, contenu, menus | `#1A261F` |
+| Vert forêt — actions principales, sélection, boutons | `#315E43` |
+| Vert sauge — détails lumineux, accents graphiques | `#A9C7AE` |
+
+Les couleurs d'état restent distinctes : succès lumineux pour « Terminé »,
+ambre pour les avertissements, terracotta pour les erreurs, bleu-gris pour
+l'information et la pause.
+
+**Une organisation claire** — barre latérale fixe et sept sections stables :
+**Accueil** (démarrer vite + activité récente), **Téléchargements** (tâches
+en cours, en attente, en pause ou en erreur, avec pastille compteur),
+**Bibliothèque** (nouveau : retrouver, filtrer et ouvrir les fichiers déjà
+sur le disque, source de téléchargement incluse quand elle est connue),
+**Espace Créateurs**, **Historique** (page dédiée), **Paramètres** et
+**Aide** (nouveau : démarrage rapide, dépannage et raccourcis
+`Ctrl+1`…`Ctrl+7`). L'analyse multimédia rejoint les Créateurs, avec les
+outils de montage.
+
+**Un écran de téléchargement en trois étapes** sur l'accueil : ① coller un
+lien (bouton *Coller*, sources prises en charge expliquées), ② choisir les
+options utiles (destination, qualité YouTube), ③ lancer. Chaque tâche
+affiche un statut explicite et ses seules actions pertinentes (pause,
+reprise, relance, annulation, **ouvrir le fichier**, afficher le dossier),
+et la progression reflète les octets réellement écrits : **100 % signifie
+fichier complet et vérifié** — jamais avant.
+
+**Un Espace Créateurs qui se comprend tout seul** : huit cartes « Que
+voulez-vous faire ? » (préparer un projet, analyser un fichier, vérifier
+pour Premiere Pro, sous-titres, renommage, inventaire, profils) expliquent
+chaque outil, les fichiers acceptés et l'effet produit **avant** de
+l'ouvrir. La règle d'or ne change pas : les originaux ne sont jamais
+déplacés, renommés, modifiés ou écrasés.
+
+Captures et système de design complet : [`docs/DESIGN.md`](docs/DESIGN.md).
 
 ---
 
@@ -58,7 +109,7 @@ yt-dlp, et la limite de vitesse globale s'applique aussi aux flux YouTube.
 
 **Compatibilité** : le MP4 H.264/AAC est le format le plus largement accepté, mais
 aucun outil ne peut garantir l'import dans toutes les versions d'un logiciel de
-montage. Les alertes de l'onglet **Analyse multimédia** restent la référence.
+montage. Les alertes de l'outil **Analyse** (Espace Créateurs) restent la référence.
 
 **Limites assumées** : les vidéos privées, payantes, réservées aux membres,
 soumises à un contrôle d'âge ou géo-bloquées ne sont pas téléchargeables (OverLoad
@@ -139,7 +190,7 @@ Règles de sécurité appliquées partout dans l'espace Créateurs : vos fichier
 
 ## Analyseur multimédia Windows
 
-L'onglet **Analyse multimédia** de l'application native permet de sélectionner un fichier local :
+L'outil **Analyse** de l'espace Créateurs (accessible aussi depuis la Bibliothèque, bouton « Analyser ») permet de sélectionner un fichier local :
 
 - conteneur, codecs, résolution, FPS moyens et débit global/par piste (si renseigné) ;
 - toutes les pistes vidéo, audio et sous-titres, langues, canaux et pistes par défaut/forcées ;
