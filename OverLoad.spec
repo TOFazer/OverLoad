@@ -3,6 +3,8 @@
 
 from pathlib import Path
 
+from PyInstaller.utils.hooks import collect_submodules
+
 ROOT = Path(SPECPATH)
 
 a = Analysis(
@@ -27,6 +29,7 @@ a = Analysis(
         "overload.downloads.state",
         "overload.downloads.telemetry",
         "overload.downloads.urls",
+        "overload.downloads.youtube",
         "overload.history.store",
         "overload.settings.store",
         "overload.ui.components",
@@ -36,6 +39,8 @@ a = Analysis(
         "overload.ui.theme",
         "overload.ui.web.server",
         "overload.ui.window",
+        "yt_dlp",
+        *collect_submodules("yt_dlp"),
     ],
     hookspath=[],
     hooksconfig={},

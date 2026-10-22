@@ -49,6 +49,12 @@ from overload.downloads.telemetry import (
     classify_error,
 )
 from overload.downloads.urls import parse_url_list, validate_direct_url
+from overload.downloads.youtube import (
+    YoutubeExtractor,
+    is_youtube_url,
+    normalize_quality,
+    youtube_video_id,
+)
 from overload.history.store import DownloadHistoryStore, HistoryEntry
 
 MIN_CONCURRENT = 1
@@ -81,6 +87,10 @@ class _ManagedTask:
     finished_at: str | None = None
     started_mono: float | None = None
     bytes_at_run_start: int = 0
+    provider: str = "http"
+    quality: str = "best"
+    media_title: str = ""
+    thumbnail_url: str = ""
 
 
 class DownloadManager:
@@ -102,6 +112,8 @@ class DownloadManager:
         timeout: float = 30.0,
         stall_threshold_seconds: float = 4.0,
         clock: Callable[[], float] = time.monotonic,
+        youtube: YoutubeExtractor | None = None,
+        default_quality: str = "best",
     ) -> None:
         dest = Path(destination_dir).expanduser()
         dest.mkdir(parents=True, exist_ok=True)
@@ -128,6 +140,8 @@ class DownloadManager:
         self._timeout = max(1.0, float(timeout))
         self._stall_threshold_seconds = max(1.0, float(stall_threshold_seconds))
 
+        self._youtube = youtube if youtube is not None else YoutubeExtractor()
+        self._default_quality = normalize_quality(default_quality)
         self._limiter = BandwidthLimiter(limit_bps=speed_limit_bps, clock=clock)
         self._global_speed = SpeedEstimator(
             window_seconds=3.0,
@@ -161,6 +175,11 @@ class DownloadManager:
     @property
     def history(self) -> DownloadHistoryStore | None:
         return self._history
+
+    @property
+    def youtube_available(self) -> bool:
+        """Vrai si l'extracteur yt-dlp est présent dans cette installation."""
+        return self._youtube.available()
 
     def settings(self) -> ManagerSettings:
         with self._lock:
@@ -280,6 +299,69 @@ class DownloadManager:
             return False
         return (parts.hostname or "", parts.port or -1) in self._allowed_local_endpoints
 
+    # ------------------------------------------------------------------
+    # Résolution de la source : fichier direct ou vidéo YouTube
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _display_filename(clean_url: str) -> str:
+        """Nom provisoire affiché pendant la validation (sans aucun appel réseau)."""
+        if is_youtube_url(clean_url):
+            video_id = youtube_video_id(clean_url) or "video"
+            return f"YouTube {video_id}.mp4"
+        return filename_from_url(clean_url)
+
+    def _prepare_source(
+        self,
+        url: str,
+        *,
+        filename: str | None = None,
+        quality: str | None = None,
+    ) -> tuple[str, str | None, str, str, str, str]:
+        """Valide l'adresse et résout son type.
+
+        Retourne `(url_nettoyée, nom_de_fichier, fournisseur, qualité, titre, miniature)`.
+        Une adresse YouTube déclenche une seule requête de métadonnées (mise en
+        cache par identifiant de vidéo), afin de nommer le fichier avec le titre
+        réel de la vidéo et de mémoriser la qualité choisie.
+        """
+        clean_url = validate_direct_url(
+            url, allow_private_hosts=self._allow_private_for(url)
+        )
+        if not is_youtube_url(clean_url):
+            return (clean_url, filename, "http", "best", "", "")
+
+        chosen_quality = (
+            self._default_quality if quality is None else normalize_quality(quality)
+        )
+        info = self._youtube.probe(clean_url)
+        title = info.safe_title
+        if filename:
+            base_name = sanitize_filename(filename)
+        else:
+            base_name = f"{sanitize_filename(title, strip_path=False)}.mp4"
+        if Path(base_name).suffix.lower() != ".mp4":
+            base_name = f"{Path(base_name).stem}.mp4"
+        return (clean_url, base_name, "youtube", chosen_quality, title, info.thumbnail_url)
+
+    def inspect_media(self, url: str) -> dict[str, Any]:
+        """Renseigne l'interface sur une page YouTube (titre, miniature, qualités)."""
+        clean_url = validate_direct_url(
+            url, allow_private_hosts=self._allow_private_for(url)
+        )
+        if not is_youtube_url(clean_url):
+            raise OverloadError(
+                "Cette adresse n'est pas une page YouTube.",
+                "seules les vidéos YouTube et les fichiers HTTP(S) directs sont pris en charge.",
+                "Collez un lien youtube.com/watch?v=…, youtu.be/… ou une adresse de fichier.",
+            )
+        info = self._youtube.probe(clean_url)
+        payload = info.to_dict(quality=self._default_quality)
+        payload["suggested_filename"] = (
+            f"{sanitize_filename(info.safe_title, strip_path=False)}.mp4"
+        )
+        payload["extractor_available"] = self._youtube.available()
+        return payload
+
     def check_duplicate(
         self,
         url: str,
@@ -328,7 +410,7 @@ class DownloadManager:
                 continue
 
             if clean_url in seen_urls:
-                name = filename_from_url(clean_url)
+                name = self._display_filename(clean_url)
                 duplicates.append(
                     DuplicateMatch(
                         url=clean_url,
@@ -355,7 +437,8 @@ class DownloadManager:
                     {
                         "line": line_no,
                         "url": clean_url,
-                        "filename": filename_from_url(clean_url),
+                        "filename": self._display_filename(clean_url),
+                        "provider": "youtube" if is_youtube_url(clean_url) else "http",
                     }
                 )
 
@@ -374,6 +457,7 @@ class DownloadManager:
         destination_dir: Path | None = None,
         duplicate_policy: DuplicatePolicy | str | None = None,
         start_paused: bool = False,
+        quality: str | None = None,
     ) -> TaskSnapshot | None:
         """Ajoute un téléchargement unique en file d'attente.
 
@@ -381,8 +465,8 @@ class DownloadManager:
         effective est `DuplicatePolicy.SKIP`. Lève `DuplicateDetectedError` si la
         politique est `DuplicatePolicy.ASK` et qu'un doublon complet existe déjà.
         """
-        clean_url = validate_direct_url(
-            url, allow_private_hosts=self._allow_private_for(url)
+        clean_url, resolved_name, provider, task_quality, title, thumbnail = (
+            self._prepare_source(url, filename=filename, quality=quality)
         )
         with self._cond:
             dest = Path(destination_dir) if destination_dir is not None else self._destination_dir
@@ -400,14 +484,14 @@ class DownloadManager:
             dup = detect_duplicate(
                 clean_url,
                 dest,
-                filename=filename,
+                filename=resolved_name,
                 active_items=self._active_items_locked(),
                 history=self._history,
             )
             target_path, resumed_from_part = self._resolve_target_locked(
                 clean_url=clean_url,
                 dest=dest,
-                filename=filename,
+                filename=resolved_name,
                 dup=dup,
                 policy=policy,
             )
@@ -419,6 +503,10 @@ class DownloadManager:
                 target_path=target_path,
                 resumed_from_part=resumed_from_part,
                 start_paused=start_paused,
+                provider=provider,
+                quality=task_quality,
+                media_title=title,
+                thumbnail_url=thumbnail,
             )
             self._cond.notify_all()
             return self._snapshot_locked(task)
@@ -430,6 +518,7 @@ class DownloadManager:
         destination_dir: Path | None = None,
         duplicate_policy: DuplicatePolicy | str | None = None,
         start_paused: bool = False,
+        quality: str | None = None,
     ) -> BatchResult:
         """Ajoute une liste de liens en lot sans qu'une erreur individuelle bloque le reste."""
         entries = parse_url_list(source)
@@ -447,9 +536,14 @@ class DownloadManager:
 
         for line_no, raw_url in entries:
             try:
-                clean_url = validate_direct_url(
-                    raw_url, allow_private_hosts=self._allow_private_for(raw_url)
-                )
+                (
+                    clean_url,
+                    resolved_name,
+                    provider,
+                    task_quality,
+                    title,
+                    thumbnail,
+                ) = self._prepare_source(raw_url, quality=quality)
             except OverloadError as exc:
                 rejected.append(RejectedLink(line=line_no, url=raw_url, error=str(exc)))
                 continue
@@ -469,13 +563,14 @@ class DownloadManager:
                     dup = detect_duplicate(
                         clean_url,
                         dest,
+                        filename=resolved_name,
                         active_items=self._active_items_locked(),
                         history=self._history,
                     )
                     target_path, resumed_from_part = self._resolve_target_locked(
                         clean_url=clean_url,
                         dest=dest,
-                        filename=None,
+                        filename=resolved_name,
                         dup=dup,
                         policy=policy,
                     )
@@ -488,6 +583,10 @@ class DownloadManager:
                         target_path=target_path,
                         resumed_from_part=resumed_from_part,
                         start_paused=start_paused,
+                        provider=provider,
+                        quality=task_quality,
+                        media_title=title,
+                        thumbnail_url=thumbnail,
                     )
                     self._cond.notify_all()
                     added.append(self._snapshot_locked(task))
@@ -579,7 +678,7 @@ class DownloadManager:
                 task.next_retry_mono = None
                 task.speed.reset()
                 task.finished_at = datetime.now(UTC).isoformat()
-                self._part_path(task.target_path).unlink(missing_ok=True)
+                self._discard_partials(task)
                 record_snapshot = task
                 self._cond.notify_all()
             elif task.state is TaskState.RUNNING:
@@ -767,6 +866,26 @@ class DownloadManager:
     def _part_path(target: Path) -> Path:
         return target.with_name(target.name + PART_SUFFIX)
 
+    def _discard_partials(self, task: _ManagedTask) -> None:
+        """Supprime le `.part` HTTP et les fragments yt-dlp d'une tâche annulée."""
+        self._part_path(task.target_path).unlink(missing_ok=True)
+        if task.provider != "youtube":
+            return
+        stem = task.target_path.with_suffix("")
+        if not stem.parent.is_dir():
+            return
+        prefix = stem.name + "."
+        for candidate in stem.parent.iterdir():
+            if (
+                candidate.is_file()
+                and candidate.name.startswith(prefix)
+                and candidate != task.target_path
+            ):
+                try:
+                    candidate.unlink()
+                except OSError:
+                    continue
+
     def _active_items_locked(self) -> list[tuple[str, str, Path]]:
         return [
             (t.id, t.url, t.target_path)
@@ -831,6 +950,10 @@ class DownloadManager:
         target_path: Path,
         resumed_from_part: bool,
         start_paused: bool,
+        provider: str = "http",
+        quality: str = "best",
+        media_title: str = "",
+        thumbnail_url: str = "",
     ) -> _ManagedTask:
         self._seq_counter += 1
         part = self._part_path(target_path)
@@ -850,6 +973,10 @@ class DownloadManager:
             ),
             downloaded_bytes=initial_bytes,
             resumed_from_part=resumed_from_part or initial_bytes > 0,
+            provider=provider,
+            quality=quality,
+            media_title=media_title,
+            thumbnail_url=thumbnail_url,
         )
         if start_paused:
             task.pause_event.set()
@@ -936,17 +1063,31 @@ class DownloadManager:
 
         record_after: _ManagedTask | None = None
         try:
-            download_to(
-                task.url,
-                task.target_path,
-                allow_private_hosts=self._allow_private_for(task.url),
-                progress=on_progress,
-                cancel_event=task.cancel_event,
-                pause_event=task.pause_event,
-                bandwidth_limiter=self._limiter,
-                on_issue=on_issue,
-                timeout=self._timeout,
-            )
+            if task.provider == "youtube":
+                # yt-dlp gère lui-même la limite via `ratelimit`, sans double
+                # comptage dans le seau à jetons partagé.
+                self._youtube.download(
+                    task.url,
+                    task.target_path,
+                    quality=task.quality,
+                    progress=on_progress,
+                    cancel_event=task.cancel_event,
+                    pause_event=task.pause_event,
+                    max_rate_bps=self._limiter.limit_bps,
+                    timeout=self._timeout,
+                )
+            else:
+                download_to(
+                    task.url,
+                    task.target_path,
+                    allow_private_hosts=self._allow_private_for(task.url),
+                    progress=on_progress,
+                    cancel_event=task.cancel_event,
+                    pause_event=task.pause_event,
+                    bandwidth_limiter=self._limiter,
+                    on_issue=on_issue,
+                    timeout=self._timeout,
+                )
             with self._cond:
                 task.state = transition(task.state, TaskState.FINALIZING)
                 final_size = (
@@ -1133,4 +1274,8 @@ class DownloadManager:
             created_at=task.created_at,
             started_at=task.started_at,
             finished_at=task.finished_at,
+            provider=task.provider,
+            quality=task.quality,
+            media_title=task.media_title,
+            thumbnail_url=task.thumbnail_url,
         )

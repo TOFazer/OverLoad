@@ -307,3 +307,25 @@ Chaque critère sera vérifié par un test automatisé ou une procédure écrite
 | 5 | Dépôt `OverLoadDev` : **privé** (choix validé, création **en attente** : permission manquante) | Validée, action restante |
 
 Conséquence de la décision 2 : yt-dlp est retiré de la v1 et la section 6 le concerne uniquement pour une étude ultérieure. Toute source supplémentaire exigera une vérification écrite de ses conditions d'utilisation avant intégration.
+
+---
+
+## 12. Addendum v1.2 — activation de YouTube (2026-10-22)
+
+La décision initiale consistait à n'accepter que les URL HTTP(S) directes. La
+version 1.2 ajoute YouTube selon les garde-fous suivants :
+
+- **Liste blanche stricte** : seul un domaine YouTube connu et une URL contenant
+  un identifiant de vidéo valide atteignent `yt-dlp`. Aucun autre extracteur
+  n'est accessible depuis l'interface.
+- **Aucun contournement** : pas de connexion à un compte, pas de cookies, pas de
+  DRM, pas d'option de contournement géographique. Les vidéos privées, payantes,
+  réservées aux membres ou soumises à un contrôle d'âge sont refusées.
+- **Téléchargement autorisé uniquement** : l'utilisateur reste responsable du
+  respect du droit d'auteur et des conditions d'utilisation de YouTube.
+- **Licence** : `yt-dlp` est sous Unlicense ; il est embarqué dans l'exécutable
+  et référencé dans `THIRD_PARTY_LICENSES.md`.
+- **Vérification du résultat** : FFprobe contrôle la présence réelle d'une piste
+  vidéo et une durée positive avant de déclarer le fichier terminé.
+
+Cette activation ne remet pas en cause les autres décisions de l'audit.

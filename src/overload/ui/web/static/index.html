@@ -154,9 +154,25 @@
               placeholder="Nom du fichier (optionnel)"
               autocomplete="off"
             />
+            <select id="single-quality-select" class="input quality-select" title="Qualité vidéo (YouTube)">
+              <option value="best">Meilleure qualité</option>
+              <option value="2160p">2160p (4K)</option>
+              <option value="1440p">1440p (QHD)</option>
+              <option value="1080p">1080p (Full HD)</option>
+              <option value="720p">720p (HD)</option>
+              <option value="480p">480p (SD)</option>
+              <option value="360p">360p (SD)</option>
+            </select>
             <button type="submit" class="btn btn-primary btn-submit">
               <span>⬇ Télécharger</span>
             </button>
+          </div>
+          <div id="media-info" class="media-info hidden">
+            <img id="media-thumb" class="media-thumb" alt="" />
+            <div class="media-meta">
+              <div id="media-title" class="media-title"></div>
+              <div id="media-subtitle" class="media-subtitle"></div>
+            </div>
           </div>
           <div id="precheck-banner" class="precheck-banner hidden"></div>
         </form>

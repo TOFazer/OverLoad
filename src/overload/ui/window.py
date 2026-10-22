@@ -8,13 +8,23 @@ opérations à l'historique et au moteur de téléchargement.
 from __future__ import annotations
 
 import shutil
+import threading
 import time
 import webbrowser
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QRectF, QSize, Qt, QTimer
+from PySide6.QtCore import (
+    QEasingCurve,
+    QObject,
+    QPropertyAnimation,
+    QRectF,
+    QSize,
+    Qt,
+    QTimer,
+    Signal,
+)
 from PySide6.QtGui import (
     QAction,
     QColor,
@@ -51,10 +61,11 @@ from PySide6.QtWidgets import (
 
 from overload import __version__
 from overload.core.errors import OverloadError
-from overload.core.formatting import format_bytes
+from overload.core.formatting import format_bytes, format_duration
 from overload.core.paths import default_data_dir, open_folder
 from overload.downloads.duplicates import DuplicateDetectedError, DuplicatePolicy
 from overload.downloads.state import TaskState
+from overload.downloads.youtube import QUALITY_CHOICES, is_youtube_url
 from overload.settings.store import ACCENTS as ACCENT_KEYS
 from overload.settings.store import UI_SCALES as UI_SCALE_KEYS
 from overload.ui import icons
@@ -169,6 +180,27 @@ def _clear_rows(layout: QVBoxLayout, keep_last: int = 1) -> None:
             widget.deleteLater()
 
 
+class _MediaProbe(QObject):
+    """Interroge YouTube en arrière-plan pour ne jamais figer l'interface."""
+
+    done = Signal(str, object, object)
+
+    def __init__(self, manager, parent: QObject | None = None) -> None:
+        super().__init__(parent)
+        self._manager = manager
+
+    def start(self, url: str) -> None:
+        threading.Thread(target=self._run, args=(url,), daemon=True).start()
+
+    def _run(self, url: str) -> None:
+        try:
+            info = self._manager.inspect_media(url)
+        except Exception as exc:  # noqa: BLE001 - message affiché tel quel
+            self.done.emit(url, None, str(exc))
+        else:
+            self.done.emit(url, info, None)
+
+
 class BatchDialog(QDialog):
     """Boîte de dialogue de téléchargement par lot."""
 
@@ -208,6 +240,19 @@ class BatchDialog(QDialog):
         info_row.addWidget(inspect_btn)
         info_row.addWidget(self.info, 1)
         layout.addLayout(info_row)
+
+        quality_row = QHBoxLayout()
+        quality_label = QLabel("Qualité YouTube")
+        quality_label.setObjectName("mutedLabel")
+        self.quality_combo = QComboBox()
+        for value, label in QUALITY_CHOICES:
+            self.quality_combo.addItem(label, value)
+        self.quality_combo.setToolTip(
+            "Utilisée pour les liens YouTube ; ignorée pour les fichiers directs."
+        )
+        quality_row.addWidget(quality_label)
+        quality_row.addWidget(self.quality_combo, 1)
+        layout.addLayout(quality_row)
 
         buttons = QDialogButtonBox()
         cancel = buttons.addButton("Annuler", QDialogButtonBox.ButtonRole.RejectRole)
@@ -254,7 +299,11 @@ class BatchDialog(QDialog):
         policy = self.window.manager.settings().duplicate_policy
         effective = DuplicatePolicy.SKIP if policy is DuplicatePolicy.ASK else policy
         try:
-            result = self.window.manager.enqueue_batch(raw, duplicate_policy=effective)
+            result = self.window.manager.enqueue_batch(
+                raw,
+                duplicate_policy=effective,
+                quality=self.quality_combo.currentData(),
+            )
         except OverloadError as exc:
             self.window.show_error(exc)
             return
@@ -680,6 +729,10 @@ class OverloadWindow(QMainWindow):
         self._disk_at = 0.0
         self._last_overview: dict[str, Any] = {}
         self._fade: QPropertyAnimation | None = None
+        self._media_cache: dict[str, dict[str, Any]] = {}
+        self._probe_url: str | None = None
+        self._probe = _MediaProbe(manager, self)
+        self._probe.done.connect(self._on_media_info)
 
         self.setWindowTitle("OverLoad — Téléchargements, analyse multimédia et espace Créateurs")
         self.setWindowIcon(build_app_icon())
@@ -903,8 +956,8 @@ class OverloadWindow(QMainWindow):
         self.hero_title.setObjectName("heroTitle")
         self.hero_title.setTextFormat(Qt.TextFormat.RichText)
         self.hero_subtitle = QLabel(
-            "Collez un lien direct : OverLoad s'occupe du reste — reprise automatique, "
-            "vitesse maîtrisée et fichiers bien rangés."
+            "Collez un lien YouTube ou direct : OverLoad récupère le titre, "
+            "télécharge la vidéo en MP4 et s'occupe du reste."
         )
         self.hero_subtitle.setObjectName("heroSubtitle")
         self.hero_subtitle.setWordWrap(True)
@@ -916,7 +969,9 @@ class OverloadWindow(QMainWindow):
         composer.setSpacing(9)
         self.url_edit = QLineEdit()
         self.url_edit.setObjectName("urlField")
-        self.url_edit.setPlaceholderText("https://exemple.com/video.mp4")
+        self.url_edit.setPlaceholderText(
+            "Collez un lien YouTube (youtube.com/watch?v=…, youtu.be/…) ou un fichier direct"
+        )
         self.url_edit.setMinimumHeight(round(48 * self.scale))
         self.url_edit.addAction(
             icons.icon("link", self.tokens.text_muted, 17), QLineEdit.ActionPosition.LeadingPosition
@@ -929,6 +984,16 @@ class OverloadWindow(QMainWindow):
         self.url_edit.textChanged.connect(self._schedule_validation)
         self.url_edit.returnPressed.connect(self.download_from_composer)
         composer.addWidget(self.url_edit, 1)
+
+        self.quality_combo = QComboBox()
+        for value, label in QUALITY_CHOICES:
+            self.quality_combo.addItem(label, value)
+        self.quality_combo.setMinimumHeight(round(48 * self.scale))
+        self.quality_combo.setMinimumWidth(round(172 * self.scale))
+        self.quality_combo.setToolTip(
+            "Qualité de la vidéo YouTube. Ignorée pour les fichiers directs."
+        )
+        composer.addWidget(self.quality_combo)
 
         self.download_btn = QPushButton("Télécharger")
         self.download_btn.setObjectName("primaryBtn")
@@ -943,7 +1008,9 @@ class OverloadWindow(QMainWindow):
 
         hint_row = QHBoxLayout()
         hint_row.setSpacing(10)
-        self.url_hint = QLabel("Les liens HTTP(S) directs sont pris en charge.")
+        self.url_hint = QLabel(
+            "Liens YouTube et fichiers HTTP(S) directs pris en charge."
+        )
         self.url_hint.setObjectName("mutedLabel")
         self.url_hint.setWordWrap(True)
         self.batch_link = QPushButton("Télécharger plusieurs liens")
@@ -1481,7 +1548,9 @@ class OverloadWindow(QMainWindow):
         if not text:
             self._set_url_state("")
             self.url_hint.setObjectName("mutedLabel")
-            self.url_hint.setText("Les liens HTTP(S) directs sont pris en charge.")
+            self.url_hint.setText(
+                "Liens YouTube et fichiers HTTP(S) directs pris en charge."
+            )
             self._restyle_label(self.url_hint)
             return
         try:
@@ -1499,9 +1568,18 @@ class OverloadWindow(QMainWindow):
             self.url_hint.setObjectName("dangerText")
             self.url_hint.setText(f"{info.title} — {info.action}")
         elif result["valid"]:
+            entry = result["valid"][0]
             self._set_url_state("valid")
+            if entry.get("provider") == "youtube":
+                self.url_hint.setObjectName("successText")
+                self.url_hint.setText(
+                    "Vidéo YouTube détectée — récupération du titre et des qualités…"
+                )
+                self._restyle_label(self.url_hint)
+                self._probe_media(text)
+                return
             self.url_hint.setObjectName("successText")
-            self.url_hint.setText(f"Prêt à télécharger « {result['valid'][0]['filename']} »")
+            self.url_hint.setText(f"Prêt à télécharger « {entry['filename']} »")
         else:
             self._set_url_state("")
         self._restyle_label(self.url_hint)
@@ -1511,15 +1589,62 @@ class OverloadWindow(QMainWindow):
         label.style().unpolish(label)
         label.style().polish(label)
 
+    def _probe_media(self, url: str) -> None:
+        cached = self._media_cache.get(url)
+        if cached is not None:
+            self._apply_media_info(cached)
+            return
+        if self._probe_url == url:
+            return
+        self._probe_url = url
+        self._probe.start(url)
+
+    def _on_media_info(self, url: str, info: object, error: object) -> None:
+        if self._probe_url == url:
+            self._probe_url = None
+        if url != self.url_edit.text().strip():
+            return
+        if error or not isinstance(info, dict):
+            self.url_hint.setObjectName("dangerText")
+            message = str(error or "Informations YouTube indisponibles.")
+            self.url_hint.setText(message.split("\n")[0])
+            self._restyle_label(self.url_hint)
+            return
+        self._media_cache[url] = info
+        self._apply_media_info(info)
+
+    def _apply_media_info(self, info: dict[str, Any]) -> None:
+        duration = format_duration(info.get("duration_seconds"))
+        if duration == "Indéterminé":
+            duration = ""
+        details = ["YouTube"]
+        if info.get("uploader"):
+            details.append(str(info["uploader"]))
+        if duration:
+            details.append(duration)
+        heights = info.get("heights") or []
+        if heights:
+            details.append(f"qualités jusqu'à {heights[0]}p")
+        self.url_hint.setObjectName("successText")
+        self.url_hint.setText(f"{info.get('title', 'Vidéo')} — " + " · ".join(details))
+        self._restyle_label(self.url_hint)
+
     def download_from_composer(self) -> None:
         url = self.url_edit.text().strip()
         if not url:
             self.url_hint.setObjectName("dangerText")
-            self.url_hint.setText("Collez d'abord un lien direct vers un fichier.")
+            self.url_hint.setText(
+                "Collez d'abord un lien YouTube ou une adresse directe vers un fichier."
+            )
             self._restyle_label(self.url_hint)
             self.url_edit.setFocus()
             return
-        self._enqueue(url)
+        kwargs: dict[str, Any] = {}
+        if is_youtube_url(url):
+            quality = self.quality_combo.currentData()
+            if quality:
+                kwargs["quality"] = quality
+        self._enqueue(url, **kwargs)
 
     def _enqueue(self, url: str, **kwargs) -> None:
         try:

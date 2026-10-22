@@ -1038,3 +1038,53 @@ body {
 .toast-ok {
   border-left-color: var(--ok);
 }
+
+/* --- Aperçu YouTube : miniature, titre et qualité ------------------- */
+.quality-select {
+  flex: 0 0 190px;
+  min-height: 42px;
+}
+
+.media-info {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+}
+
+.media-thumb {
+  width: 128px;
+  height: 72px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: var(--bg-panel);
+  flex: 0 0 auto;
+}
+
+.media-meta {
+  min-width: 0;
+}
+
+.media-title {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.media-subtitle {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.task-provider {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
