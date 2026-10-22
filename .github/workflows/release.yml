@@ -3,6 +3,12 @@ name: Release OverLoad.exe
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag de version à publier (ex. v2.0.1)"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -13,6 +19,7 @@ jobs:
     runs-on: windows-latest
     env:
       QT_QPA_PLATFORM: offscreen
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
 
@@ -73,8 +80,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = "$env:GITHUB_REF_NAME"
+          $tag = "$env:RELEASE_TAG"
+          if ($tag -notmatch '^v\d+\.\d+\.\d+$') {
+            throw "Tag de release invalide : $tag (format attendu : v2.0.1)"
+          }
           gh release create $tag `
+            --target "$env:GITHUB_SHA" `
             --title "OverLoad $tag" `
             --generate-notes `
             dist/OverLoad.exe dist/OverLoad-Setup.exe dist/OverLoad-Portable-win64.zip dist/SHA256SUMS.txt
