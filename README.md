@@ -10,6 +10,21 @@
 
 ---
 
+## Correctif v2.0.2 — le bouton « Télécharger » répond toujours
+
+- Clic sur **« Télécharger »** : l'analyse du lien YouTube ne fige plus la
+  fenêtre et se fait hors du thread graphique, avec un retour visible
+  (« Analyse du lien en cours… »).
+- Délai maximal : si YouTube met trop de temps à répondre, un message explicite
+  s'affiche au lieu de laisser le bouton semble ne rien faire. Si l'analyse finit
+  par aboutir, le téléchargement est ajouté automatiquement.
+- Toute erreur interne (module YouTube endommagé, bug imprévu) affiche un
+  dialogue clair — plus aucun clic silencieux.
+- Un doublon ignoré par la politique de téléchargement affiche désormais un
+  message explicite.
+
+---
+
 ## Correctif Windows v2.0.1 — retrouver le fichier téléchargé
 
 - Le bouton **« Afficher dans le dossier »** ouvre maintenant l'emplacement réel

@@ -248,6 +248,77 @@ class _LibraryProbe(QObject):
             self.done.emit(scan, "")
 
 
+class _DownloadOperation(QObject):
+    """Opération de téléchargement exécutée hors du thread graphique.
+
+    L'interface ne se fige jamais : `on_done(résultat, erreur)` est appelé sur le
+    thread graphique dès que l'opération se termine, ou après un délai maximal
+    avec une erreur explicite. Une finition tardive reste signalée (le succès
+    affiche la tâche ajoutée ; un échec tardif est déjà couvert par le délai).
+    """
+
+    _result = Signal(object, object)
+    settled = Signal()
+
+    def __init__(
+        self,
+        fn: Any,
+        on_done: Any,
+        *,
+        timeout_ms: int = 30_000,
+        timeout_error: OverloadError | None = None,
+        parent: QObject | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._on_done = on_done
+        self._timeout_error = timeout_error
+        self._settled = False
+        self._result.connect(self._deliver)
+        self._timer = QTimer(self)
+        self._timer.setSingleShot(True)
+        self._timer.setInterval(max(1, int(timeout_ms)))
+        self._timer.timeout.connect(self._on_timeout)
+        self._timer.start()
+        threading.Thread(target=self._run, args=(fn,), daemon=True).start()
+
+    def _run(self, fn: Any) -> None:
+        try:
+            result = fn()
+        except Exception as exc:  # noqa: BLE001 - remonté tel quel à l'interface
+            outcome = (None, exc)
+        else:
+            outcome = (result, None)
+        try:
+            self._result.emit(*outcome)
+        except RuntimeError:  # fenêtre détruite pendant l'opération
+            pass
+
+    def _on_timeout(self) -> None:
+        if self._settled:
+            return
+        self._settled = True
+        error = self._timeout_error or OverloadError(
+            "L'analyse du lien prend trop de temps.",
+            "le service met trop de temps à répondre ou la connexion est instable.",
+            "Vérifiez votre connexion Internet, puis réessayez.",
+        )
+        self.settled.emit()
+        self._on_done(None, error)
+
+    def _deliver(self, result: object, error: object) -> None:
+        if not self._settled:
+            self._settled = True
+            self.settled.emit()
+            self._on_done(result, error)
+            self.deleteLater()
+            return
+        # Arrivé après le délai maximal : seul un succès reste à signaler, car
+        # la tâche existe alors déjà dans le gestionnaire de téléchargements.
+        if result is not None:
+            self._on_done(result, None)
+        self.deleteLater()
+
+
 class BatchDialog(QDialog):
     """Boîte de dialogue de téléchargement par lot."""
 
@@ -307,6 +378,7 @@ class BatchDialog(QDialog):
         start.setObjectName("primaryBtn")
         layout.addWidget(buttons)
 
+        self.start_btn = start
         import_btn.clicked.connect(self._import_txt)
         inspect_btn.clicked.connect(self._inspect)
         cancel.clicked.connect(self.reject)
@@ -348,27 +420,39 @@ class BatchDialog(QDialog):
             return
         policy = self.window.manager.settings().duplicate_policy
         effective = DuplicatePolicy.SKIP if policy is DuplicatePolicy.ASK else policy
-        try:
-            result = self.window.manager.enqueue_batch(
+        quality = self.quality_combo.currentData()
+
+        def work() -> Any:
+            return self.window.manager.enqueue_batch(
                 raw,
                 duplicate_policy=effective,
-                quality=self.quality_combo.currentData(),
+                quality=quality,
             )
-        except OverloadError as exc:
-            self.window.show_error(exc)
-            return
-        self.window.toast(
-            f"Lot lancé : {len(result.added)} ajouté(s), "
-            f"{len(result.skipped_duplicates)} doublon(s) ignoré(s)."
-        )
-        if result.added:
-            self.window.maybe_reload_history(force=True)
-            self.accept()
-        else:
-            self.info.setText(
-                f"Aucun lien ajouté · {len(result.rejected)} rejeté(s) · "
-                f"{len(result.skipped_duplicates)} doublon(s)"
+
+        def done(result: object, error: object) -> None:
+            if error is not None:
+                self.window.show_error(error)
+                self.info.setText("Le lot n'a pas pu être lancé — réessayez.")
+                self.start_btn.setEnabled(True)
+                return
+            self.window.toast(
+                f"Lot lancé : {len(result.added)} ajouté(s), "
+                f"{len(result.skipped_duplicates)} doublon(s) ignoré(s)."
             )
+            if result.added:
+                self.window.maybe_reload_history(force=True)
+                self.accept()
+            else:
+                self.info.setText(
+                    f"Aucun lien ajouté · {len(result.rejected)} rejeté(s) · "
+                    f"{len(result.skipped_duplicates)} doublon(s)"
+                )
+                self.start_btn.setEnabled(True)
+
+        # L'analyse réseau du lot ne doit jamais figer la fenêtre.
+        self.start_btn.setEnabled(False)
+        self.info.setText("Analyse du lot en cours…")
+        self.window._run_download_operation(work, done)
 
 
 class SettingsPage(QWidget):
@@ -783,6 +867,8 @@ class OverloadWindow(QMainWindow):
         self._probe_url: str | None = None
         self._probe = _MediaProbe(manager, self)
         self._probe.done.connect(self._on_media_info)
+        self._composer_busy = False
+        self.async_timeout_ms = 30_000
         self._library_root: Path | None = None
         self._library_scan: LibraryScan | None = None
         self._library_rows: list[LibraryRow] = []
@@ -2133,6 +2219,14 @@ class OverloadWindow(QMainWindow):
         self.set_appearance(theme="light" if self.tokens.dark else "dark")
 
     def show_error(self, exc: BaseException) -> None:
+        if not isinstance(exc, OverloadError):
+            # Toute erreur imprévue devient une explication visible : aucune
+            # exception ne doit disparaître silencieusement dans Qt.
+            exc = OverloadError(
+                "OverLoad a rencontré une erreur inattendue.",
+                f"{type(exc).__name__}: {exc}".strip(),
+                "Réessayez l'opération ; si le problème persiste, redémarrez OverLoad.",
+            )
         info = explain_failure(str(exc))
         box = QMessageBox(self)
         box.setIcon(QMessageBox.Icon.Warning)
@@ -2294,39 +2388,107 @@ class OverloadWindow(QMainWindow):
         self._restyle_label(self.url_hint)
 
     def download_from_composer(self) -> None:
-        url = self.url_edit.text().strip()
-        if not url:
-            self.url_hint.setObjectName("dangerText")
-            self.url_hint.setText(
-                "Collez d'abord un lien YouTube ou une adresse directe vers un fichier."
-            )
-            self._restyle_label(self.url_hint)
-            self.url_edit.setFocus()
-            return
-        kwargs: dict[str, Any] = {}
-        if is_youtube_url(url):
-            quality = self.quality_combo.currentData()
-            if quality:
-                kwargs["quality"] = quality
-        self._enqueue(url, **kwargs)
+        try:
+            url = self.url_edit.text().strip()
+            if not url:
+                self.url_hint.setObjectName("dangerText")
+                self.url_hint.setText(
+                    "Collez d'abord un lien YouTube ou une adresse directe vers un fichier."
+                )
+                self._restyle_label(self.url_hint)
+                self.url_edit.setFocus()
+                return
+            if self._composer_busy:
+                self.toast("Analyse déjà en cours… patientez quelques instants.", "info")
+                return
+            kwargs: dict[str, Any] = {}
+            if is_youtube_url(url):
+                quality = self.quality_combo.currentData()
+                if quality:
+                    kwargs["quality"] = quality
+            self._enqueue(url, **kwargs)
+        except Exception as exc:  # noqa: BLE001 - jamais de clic muet
+            self.show_error(exc)
 
     def _enqueue(self, url: str, **kwargs) -> None:
-        try:
-            snap = self.manager.enqueue(url, **kwargs)
-        except DuplicateDetectedError as duplicate:
-            self._duplicate_dialog(url, duplicate, kwargs)
+        """Ajoute un téléchargement sans jamais figer le thread graphique."""
+
+        def work() -> Any:
+            return self.manager.enqueue(url, **kwargs)
+
+        def done(result: object, error: object) -> None:
+            self._on_enqueue_result(url, kwargs, result, error)
+
+        self._set_composer_busy(True)
+        op = self._run_download_operation(work, done)
+        op.settled.connect(self._on_composer_settled)
+
+    def _on_composer_settled(self) -> None:
+        """Le bouton « Télécharger » redevient utilisable dès qu'une réponse arrive."""
+        self._set_composer_busy(False)
+
+    def _run_download_operation(self, fn: Any, on_done: Any) -> _DownloadOperation:
+        """Exécute `fn` en arrière-plan et rappelle `on_done(résultat, erreur)`.
+
+        Après `async_timeout_ms`, une erreur explicite est affichée au lieu de
+        laisser le bouton semble ne rien faire ; l'opération continue en tâche de
+        fond et un aboutissement tardif reste signalé à l'utilisateur.
+        """
+        op = _DownloadOperation(
+            fn,
+            on_done,
+            timeout_ms=self.async_timeout_ms,
+            timeout_error=OverloadError(
+                "L'analyse du lien prend trop de temps.",
+                "YouTube ou le serveur mettent trop de temps à répondre.",
+                "Vérifiez votre connexion Internet puis réessayez. Si l'analyse "
+                "finit par aboutir, le téléchargement sera ajouté automatiquement.",
+            ),
+            parent=self,
+        )
+        return op
+
+    def _set_composer_busy(self, busy: bool) -> None:
+        self._composer_busy = busy
+        self.download_btn.setEnabled(not busy)
+        if busy:
+            self.url_hint.setObjectName("mutedLabel")
+            self.url_hint.setText(
+                "Analyse du lien en cours… YouTube peut prendre quelques secondes."
+            )
+            self._restyle_label(self.url_hint)
+
+    def _on_enqueue_result(
+        self, url: str, kwargs: dict, result: object, error: object
+    ) -> None:
+        if error is not None:
+            if self.url_edit.text().strip() == url:
+                self.url_hint.setObjectName("dangerText")
+                self.url_hint.setText(
+                    "Le téléchargement n'a pas pu démarrer — un message explique pourquoi."
+                )
+                self._restyle_label(self.url_hint)
+            if isinstance(error, DuplicateDetectedError):
+                self._duplicate_dialog(url, error, kwargs)
+            else:
+                self.show_error(error)
             return
-        except OverloadError as exc:
-            self.show_error(exc)
+        if result is None:
+            # Politique « ignorer » sur un doublon : message explicite, jamais muet.
+            if self.url_edit.text().strip() == url:
+                self.url_hint.setObjectName("mutedLabel")
+                self.url_hint.setText("Ce fichier est déjà téléchargé — ajout ignoré.")
+                self._restyle_label(self.url_hint)
+            self.toast("Déjà présent : téléchargement ignoré.", "info")
             return
-        if snap is not None:
+        if self.url_edit.text().strip() == url:
             self.url_edit.clear()
             self.url_hint.setObjectName("mutedLabel")
             self.url_hint.setText("Ajouté à la file. Suivez sa progression ci-dessous.")
             self._restyle_label(self.url_hint)
-            self.toast(f"« {snap.filename} » ajouté à la file.")
-            self.maybe_reload_history(force=True)
-            self.refresh_all()
+        self.toast(f"« {result.filename} » ajouté à la file.")
+        self.maybe_reload_history(force=True)
+        self.refresh_all()
 
     def _duplicate_dialog(self, url: str, duplicate: DuplicateDetectedError, kwargs: dict) -> None:
         box = QMessageBox(self)

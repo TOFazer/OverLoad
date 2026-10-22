@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "overload"
-version = "2.0.1"
+version = "2.0.2"
 description = "OverLoad — Media Manager pour Windows (téléchargements, bibliothèque, espace Créateurs)."
 readme = "README.md"
 license = { text = "MIT" }

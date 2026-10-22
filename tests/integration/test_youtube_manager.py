@@ -230,3 +230,21 @@ def test_web_media_info_rejects_non_youtube_url(youtube_web):
     code, payload = _http_json(youtube_web.url, "GET", f"/api/media/info?{query}")
     assert code == 400
     assert "YouTube" in payload["error"]
+
+
+def test_enqueue_batch_rejects_lines_with_unexpected_crashes(tmp_path):
+    """Une ligne qui provoque un bug interne est rejetée sans arrêter le lot."""
+
+    class BrokenExtractor(FakeExtractor):
+        def probe(self, url: str) -> MediaInfo:
+            raise AttributeError("plantage interne de l'extracteur")
+
+    manager = DownloadManager(tmp_path / "dl", youtube=BrokenExtractor(), auto_retry=False)
+    try:
+        result = manager.enqueue_batch(VIDEO_URL)
+        assert result.added == []
+        assert result.rejected
+        assert "AttributeError" in result.rejected[0].error
+        assert manager.list_tasks() == []
+    finally:
+        manager.shutdown()

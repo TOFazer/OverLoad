@@ -259,11 +259,14 @@ class YoutubeExtractor:
         if self._module is None:
             try:
                 import yt_dlp  # noqa: PLC0415
-            except ImportError as exc:  # pragma: no cover - dépend de l'installation
+            except Exception as exc:  # noqa: BLE001 - dépend de l'installation
+                # Toute erreur d'import (module corrompu, paquet incomplet dans le
+                # .exe…) devient une erreur utilisateur lisible, jamais un crash.
                 raise OverloadError(
-                    "Le module YouTube (yt-dlp) est absent de cette installation.",
-                    "cette édition d'OverLoad ne contient pas l'extracteur YouTube.",
-                    "Utilisez la version Windows complète d'OverLoad ou installez « yt-dlp ».",
+                    "Le module YouTube (yt-dlp) est absent ou endommagé.",
+                    "cette installation ne contient pas un extracteur YouTube utilisable.",
+                    "Réinstallez OverLoad depuis la version Windows complète, "
+                    "ou installez « yt-dlp ».",
                 ) from exc
             self._module = yt_dlp
         return self._module
@@ -317,29 +320,34 @@ class YoutubeExtractor:
         try:
             with module.YoutubeDL(options) as ydl:
                 raw = ydl.extract_info(url, download=False)
+
+            if not isinstance(raw, dict):
+                raise OverloadError(
+                    "Informations vidéo indisponibles.",
+                    "YouTube n'a renvoyé aucune métadonnée exploitable.",
+                    "Vérifiez le lien ou réessayez plus tard.",
+                )
+            if raw.get("_type") == "playlist" and raw.get("entries"):
+                raw = raw["entries"][0] or {}
+
+            heights = _available_heights(raw)
+            info = MediaInfo(
+                url=raw.get("webpage_url") or url,
+                video_id=str(raw.get("id") or video_id),
+                title=str(raw.get("title") or f"video-{video_id}"),
+                uploader=str(raw.get("uploader") or raw.get("channel") or ""),
+                duration_seconds=_as_float(raw.get("duration")),
+                thumbnail_url=str(raw.get("thumbnail") or ""),
+                heights=heights,
+                is_live=bool(raw.get("is_live")),
+            )
+        except OverloadError:
+            raise
         except Exception as exc:  # noqa: BLE001 - traduit en erreur utilisateur
+            # Inclut les erreurs de traitement des métadonnées : jamais d'exception
+            # brute qui disparaîtrait dans l'interface.
             raise self._translate_error(exc) from exc
 
-        if not isinstance(raw, dict):
-            raise OverloadError(
-                "Informations vidéo indisponibles.",
-                "YouTube n'a renvoyé aucune métadonnée exploitable.",
-                "Vérifiez le lien ou réessayez plus tard.",
-            )
-        if raw.get("_type") == "playlist" and raw.get("entries"):
-            raw = raw["entries"][0] or {}
-
-        heights = _available_heights(raw)
-        info = MediaInfo(
-            url=raw.get("webpage_url") or url,
-            video_id=str(raw.get("id") or video_id),
-            title=str(raw.get("title") or f"video-{video_id}"),
-            uploader=str(raw.get("uploader") or raw.get("channel") or ""),
-            duration_seconds=_as_float(raw.get("duration")),
-            thumbnail_url=str(raw.get("thumbnail") or ""),
-            heights=heights,
-            is_live=bool(raw.get("is_live")),
-        )
         if self._cache_limit:
             with self._lock:
                 if len(self._cache) >= self._cache_limit:
@@ -492,6 +500,16 @@ class YoutubeExtractor:
                 "Cette vidéo est réservée à un public majeur.",
                 "YouTube exige une connexion à un compte pour la lire.",
                 "OverLoad ne se connecte à aucun compte : choisissez une autre vidéo.",
+            )
+        if (
+            "not a bot" in text
+            or "confirm you're not a bot" in text
+            or "confirm you are not a bot" in text
+        ):
+            return OverloadError(
+                "YouTube demande une confirmation humaine.",
+                "la connexion utilisée est temporairement limitée par YouTube.",
+                "Réessayez dans quelques minutes, ou changez de réseau (Wi-Fi/4G).",
             )
         if "members-only" in text or "join this channel" in text:
             return OverloadError(
