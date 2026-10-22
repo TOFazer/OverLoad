@@ -9,6 +9,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ICON_PATH = ROOT / "assets" / "overload.ico"
 
+# Dégradé violet → bleu électrique de l'identité OverLoad (identité 1.1).
+_GRADIENT_START = (139.0, 92.0, 246.0)  # #8B5CF6
+_GRADIENT_END = (56.0, 189.0, 248.0)  # #38BDF8
+
 # Polygone de l'éclair normalisé sur [0, 1] x [0, 1]
 _BOLT = [
     (0.56, 0.13),
@@ -60,9 +64,11 @@ def _render_png(size: int) -> bytes:
                     b_sum += 255.0
                 else:
                     t = (nx + ny) * 0.5
-                    r_sum += 245.0 * (1.0 - t) + 234.0 * t
-                    g_sum += 158.0 * (1.0 - t) + 88.0 * t
-                    b_sum += 11.0 * (1.0 - t) + 12.0 * t
+                    r0, g0, b0 = _GRADIENT_START
+                    r1, g1, b1 = _GRADIENT_END
+                    r_sum += r0 * (1.0 - t) + r1 * t
+                    g_sum += g0 * (1.0 - t) + g1 * t
+                    b_sum += b0 * (1.0 - t) + b1 * t
                 a_sum += 255.0
             raw_rows.extend(
                 (
@@ -79,12 +85,7 @@ def _render_png(size: int) -> bytes:
 
     ihdr = struct.pack(">IIBBBBB", size, size, 8, 6, 0, 0, 0)
     idat = zlib.compress(bytes(raw_rows), level=9)
-    return (
-        b"\x89PNG\r\n\x1a\n"
-        + chunk(b"IHDR", ihdr)
-        + chunk(b"IDAT", idat)
-        + chunk(b"IEND", b"")
-    )
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", idat) + chunk(b"IEND", b"")
 
 
 def generate_ico(output: Path = ICON_PATH) -> Path:
