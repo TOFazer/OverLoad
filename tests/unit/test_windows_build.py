@@ -1,4 +1,5 @@
 """Le build direct doit préparer ses dépendances sans compter sur le workflow CI."""
+
 from __future__ import annotations
 
 import importlib.util
@@ -60,3 +61,18 @@ def test_release_version_is_synchronised_everywhere():
     installer = (root / "packaging" / "OverLoad.iss").read_text(encoding="utf-8")
     assert pyproject["project"]["version"] == __version__
     assert f'#define MyAppVersion "{__version__}"' in installer
+
+
+def test_redesigned_ui_modules_are_bundled():
+    """L'interface native est importée dynamiquement : PyInstaller doit la voir."""
+    for module in (
+        "overload.ui.window",
+        "overload.ui.components",
+        "overload.ui.icons",
+        "overload.ui.failure_text",
+        "overload.ui.theme",
+    ):
+        assert module in build.HIDDEN_IMPORTS
+    spec = (SCRIPT.parents[1] / "OverLoad.spec").read_text(encoding="utf-8")
+    assert '"overload.ui.window"' in spec
+    assert '"overload.ui.icons"' in spec

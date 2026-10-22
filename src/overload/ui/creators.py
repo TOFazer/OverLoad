@@ -45,7 +45,7 @@ from overload.creators.workspace import CreatorsWorkspace
 from overload.downloads.duplicates import DuplicatePolicy
 
 SAFETY_NOTE = (
-    "🛡 Protection des originaux : rien n'est déplacé, renommé ou supprimé sur vos fichiers "
+    "Protection des originaux : rien n'est déplacé, renommé ou supprimé sur vos fichiers "
     "d'origine — seules des copies sont créées, après votre confirmation, et aucun fichier "
     "existant n'est jamais écrasé."
 )
@@ -66,6 +66,7 @@ def create_creators_widget(
     *,
     history: Any = None,
     data_dir: Path | None = None,
+    embedded: bool = False,
 ):
     """Construit l'onglet complet « Espace Créateurs » (Qt Widgets)."""
     from PySide6.QtCore import QTimer
@@ -95,20 +96,21 @@ def create_creators_widget(
     root_layout.setContentsMargins(0, 0, 0, 0)
     root_layout.setSpacing(10)
 
-    header = QLabel("🎬 Espace Créateurs")
-    header.setObjectName("sectionTitle")
-    root_layout.addWidget(header)
-    subtitle = QLabel(
-        "Préparez un dossier complet pour chaque projet vidéo, importez et organisez vos "
-        "médias, renommez par lots, gérez sous-titres et pistes, exportez l'inventaire."
-    )
-    subtitle.setObjectName("mutedLabel")
-    subtitle.setWordWrap(True)
-    root_layout.addWidget(subtitle)
-    safety_lbl = QLabel(SAFETY_NOTE)
-    safety_lbl.setObjectName("mutedLabel")
-    safety_lbl.setWordWrap(True)
-    root_layout.addWidget(safety_lbl)
+    if not embedded:
+        header = QLabel("Espace Créateurs")
+        header.setObjectName("sectionTitle")
+        root_layout.addWidget(header)
+        subtitle = QLabel(
+            "Préparez un dossier complet pour chaque projet vidéo, importez et organisez vos "
+            "médias, renommez par lots, gérez sous-titres et pistes, exportez l'inventaire."
+        )
+        subtitle.setObjectName("mutedLabel")
+        subtitle.setWordWrap(True)
+        root_layout.addWidget(subtitle)
+        safety_lbl = QLabel(SAFETY_NOTE)
+        safety_lbl.setObjectName("mutedLabel")
+        safety_lbl.setWordWrap(True)
+        root_layout.addWidget(safety_lbl)
 
     tabs = QTabWidget()
     tabs.setObjectName("creatorsTabs")
@@ -196,7 +198,7 @@ def create_creators_widget(
         form_card = _card()
         form_layout = QVBoxLayout(form_card)
         form_layout.setContentsMargins(12, 10, 12, 10)
-        form_title = QLabel("➕ Préparer un nouveau projet vidéo")
+        form_title = QLabel("Préparer un nouveau projet vidéo")
         form_title.setObjectName("sectionTitle")
         form_layout.addWidget(form_title)
 
@@ -208,7 +210,7 @@ def create_creators_widget(
         parent_edit = QLineEdit()
         parent_edit.setObjectName("creatorsProjectParent")
         parent_edit.setPlaceholderText("Dossier parent (ex. C:\\Users\\vous\\Videos)")
-        browse_parent_btn = QPushButton("📂 Parcourir…")
+        browse_parent_btn = QPushButton("Parcourir…")
         profile_combo = QComboBox()
         profile_combo.setObjectName("creatorsProjectProfile")
         row1.addWidget(QLabel("Nom :"))
@@ -219,7 +221,7 @@ def create_creators_widget(
         form_layout.addLayout(row1)
 
         row2 = QHBoxLayout()
-        create_btn = QPushButton("🗂 Créer le dossier du projet")
+        create_btn = QPushButton("Créer le dossier du projet")
         create_btn.setObjectName("creatorsProjectCreate")
         create_btn.setProperty("primary", True)
         row2.addWidget(QLabel("Profil de montage :"))
@@ -237,7 +239,7 @@ def create_creators_widget(
         form_layout.addWidget(note)
         layout.addWidget(form_card)
 
-        list_title = QLabel("📚 Projets enregistrés")
+        list_title = QLabel("Projets enregistrés")
         list_title.setObjectName("sectionTitle")
         layout.addWidget(list_title)
         scroll = QScrollArea()
@@ -297,7 +299,8 @@ def create_creators_widget(
                 info_col.addWidget(meta)
                 card_layout.addLayout(info_col, stretch=1)
 
-                open_btn = QPushButton("📁 Ouvrir")
+                open_btn = QPushButton("Ouvrir")
+
                 def _open_project(pid: str = project.id) -> None:
                     _safe(
                         lambda: (
@@ -306,9 +309,7 @@ def create_creators_widget(
                         )
                     )
 
-                open_btn.clicked.connect(
-                    lambda _checked=False, pid=project.id: _open_project(pid)
-                )
+                open_btn.clicked.connect(lambda _checked=False, pid=project.id: _open_project(pid))
                 remove_btn = QPushButton("Retirer de la liste")
                 remove_btn.clicked.connect(
                     lambda _checked=False, pid=project.id: _confirm_remove_project(pid)
@@ -405,7 +406,7 @@ def create_creators_widget(
         sources_card = _card()
         sources_layout = QVBoxLayout(sources_card)
         sources_layout.setContentsMargins(12, 10, 12, 10)
-        src_title = QLabel("1️⃣ Vos médias d'origine (fichiers ou dossiers entiers)")
+        src_title = QLabel("1⃣ Vos médias d'origine (fichiers ou dossiers entiers)")
         src_title.setObjectName("sectionTitle")
         sources_layout.addWidget(src_title)
         sources_edit = QPlainTextEdit()
@@ -417,9 +418,9 @@ def create_creators_widget(
         sources_edit.setMaximumHeight(110)
         sources_layout.addWidget(sources_edit)
         src_buttons = QHBoxLayout()
-        add_files_btn = QPushButton("➕ Ajouter des fichiers…")
-        add_folder_btn = QPushButton("➕ Ajouter un dossier…")
-        clear_sources_btn = QPushButton("🗑 Vider")
+        add_files_btn = QPushButton("Ajouter des fichiers…")
+        add_folder_btn = QPushButton("Ajouter un dossier…")
+        clear_sources_btn = QPushButton("Vider")
         src_buttons.addWidget(add_files_btn)
         src_buttons.addWidget(add_folder_btn)
         src_buttons.addWidget(clear_sources_btn)
@@ -430,7 +431,7 @@ def create_creators_widget(
         dest_card = _card()
         dest_layout = QVBoxLayout(dest_card)
         dest_layout.setContentsMargins(12, 10, 12, 10)
-        dest_title = QLabel("2️⃣ Destination : un de vos projets, ou un nouveau dossier")
+        dest_title = QLabel("2⃣ Destination : un de vos projets, ou un nouveau dossier")
         dest_title.setObjectName("sectionTitle")
         dest_layout.addWidget(dest_title)
         dest_row = QHBoxLayout()
@@ -440,7 +441,7 @@ def create_creators_widget(
         dest_edit = QLineEdit()
         dest_edit.setObjectName("creatorsPrepareFolder")
         dest_edit.setPlaceholderText("Dossier de destination du projet…")
-        browse_dest_btn = QPushButton("📂 Parcourir…")
+        browse_dest_btn = QPushButton("Parcourir…")
         dest_row.addWidget(QLabel("Projet :"))
         dest_row.addWidget(project_combo, stretch=1)
         dest_row.addWidget(dest_edit, stretch=1)
@@ -470,16 +471,16 @@ def create_creators_widget(
         plan_card = _card()
         plan_layout = QVBoxLayout(plan_card)
         plan_layout.setContentsMargins(12, 10, 12, 10)
-        plan_title = QLabel("3️⃣ Plan puis copie contrôlée")
+        plan_title = QLabel("3⃣ Plan puis copie contrôlée")
         plan_title.setObjectName("sectionTitle")
         plan_layout.addWidget(plan_title)
         plan_buttons = QHBoxLayout()
-        plan_btn = QPushButton("🔍 Préparer le plan (rien n'est copié)")
+        plan_btn = QPushButton("Préparer le plan (rien n'est copié)")
         plan_btn.setObjectName("creatorsPreparePlan")
-        run_btn = QPushButton("✅ Copier les fichiers")
+        run_btn = QPushButton("Copier les fichiers")
         run_btn.setObjectName("creatorsPrepareRun")
         run_btn.setEnabled(False)
-        open_dest_btn = QPushButton("📁 Ouvrir la destination")
+        open_dest_btn = QPushButton("Ouvrir la destination")
         open_dest_btn.setEnabled(False)
         plan_buttons.addWidget(plan_btn)
         plan_buttons.addWidget(run_btn)
@@ -589,7 +590,7 @@ def create_creators_widget(
                 state["dest"] = root
                 lines = []
                 for step in plan:
-                    marker = "⚠ existe déjà" if step.collision else "✓"
+                    marker = "existe déjà" if step.collision else ""
                     lines.append(f"{marker}  {step.source}  →  {step.destination}")
                 collisions = sum(1 for step in plan if step.collision)
                 preview_edit.setPlainText(
@@ -655,11 +656,9 @@ def create_creators_widget(
                     _report_error(payload)
                     return
                 result = payload
-                failed_lines = "\n".join(
-                    f"  {src.name} : {err}" for src, err in result.failed[:5]
-                )
+                failed_lines = "\n".join(f"  {src.name} : {err}" for src, err in result.failed[:5])
                 summary = (
-                    f"✅ {len(result.copied)} copie(s) créée(s) · "
+                    f"{len(result.copied)} copie(s) créée(s) · "
                     f"{len(result.skipped)} ignorée(s) · "
                     f"{len(result.failed)} échec(s)."
                 )
@@ -667,11 +666,9 @@ def create_creators_widget(
                     summary += "\nÉchecs :\n" + failed_lines
                 plan_summary.setText(summary)
                 preview_edit.setPlainText(
-                    "\n".join(f"✓ {src}  →  {dst}" for src, dst in result.copied)
+                    "\n".join(f"{src}  →  {dst}" for src, dst in result.copied)
                     + "\n"
-                    + "\n".join(
-                        f"– {src.name} : {reason}" for src, reason in result.skipped
-                    )
+                    + "\n".join(f"– {src.name} : {reason}" for src, reason in result.skipped)
                 )
 
             run_btn.setEnabled(False)
@@ -710,7 +707,7 @@ def create_creators_widget(
         sources_card = _card()
         sources_layout = QVBoxLayout(sources_card)
         sources_layout.setContentsMargins(12, 10, 12, 10)
-        title = QLabel("✏️ Renommer des lots de fichiers")
+        title = QLabel("Renommer des lots de fichiers")
         title.setObjectName("sectionTitle")
         sources_layout.addWidget(title)
         sources_edit = QPlainTextEdit()
@@ -721,9 +718,9 @@ def create_creators_widget(
         sources_edit.setMaximumHeight(110)
         sources_layout.addWidget(sources_edit)
         buttons = QHBoxLayout()
-        add_files_btn = QPushButton("➕ Ajouter des fichiers…")
-        add_folder_btn = QPushButton("➕ Ajouter un dossier…")
-        clear_btn = QPushButton("🗑 Vider")
+        add_files_btn = QPushButton("Ajouter des fichiers…")
+        add_folder_btn = QPushButton("Ajouter un dossier…")
+        clear_btn = QPushButton("Vider")
         buttons.addWidget(add_files_btn)
         buttons.addWidget(add_folder_btn)
         buttons.addWidget(clear_btn)
@@ -755,7 +752,7 @@ def create_creators_widget(
         policy_combo.setObjectName("creatorsRenamePolicy")
         policy_combo.addItem("En conflit : ajouter « (2) », « (3) »… (rien n'est écrasé)", "rename")
         policy_combo.addItem("En conflit : laisser le fichier intact", "skip")
-        apply_btn = QPushButton("✅ Renommer les fichiers")
+        apply_btn = QPushButton("Renommer les fichiers")
         apply_btn.setObjectName("creatorsRenameApply")
         policy_row.addWidget(QLabel("Conflits :"))
         policy_row.addWidget(policy_combo, stretch=1)
@@ -793,15 +790,13 @@ def create_creators_widget(
             lines = []
             for step in steps:
                 if step.status == "ok":
-                    lines.append(f"✓ {step.original.name}  →  {step.new_path.name}")
+                    lines.append(f"{step.original.name}  →  {step.new_path.name}")
                 elif step.status == "conflit":
-                    lines.append(
-                        f"⚠ {step.original.name}  →  {step.new_path.name} ({step.message})"
-                    )
+                    lines.append(f"{step.original.name}  →  {step.new_path.name} ({step.message})")
                 elif step.status == "inchangé":
                     lines.append(f"= {step.original.name} (inchangé)")
                 else:
-                    lines.append(f"✕ {step.original.name} — {step.message.splitlines()[0]}")
+                    lines.append(f"{step.original.name} — {step.message.splitlines()[0]}")
             preview_edit.setPlainText("\n".join(lines))
 
         def on_apply() -> None:
@@ -849,12 +844,10 @@ def create_creators_widget(
                 remaining = [src for src, _ in result.renamed]
                 new_names = [dst for _, dst in result.renamed]
                 # Remplace la liste par les nouveaux chemins pour un nouvel aperçu.
-                kept = [
-                    p for p in _parse_paths(sources_edit.toPlainText()) if p not in remaining
-                ]
+                kept = [p for p in _parse_paths(sources_edit.toPlainText()) if p not in remaining]
                 sources_edit.setPlainText("\n".join(str(p) for p in kept + new_names))
                 preview_lbl.setText(
-                    f"✅ {len(result.renamed)} fichier(s) renommé(s) · "
+                    f"{len(result.renamed)} fichier(s) renommé(s) · "
                     f"{len(result.skipped)} laissé(s) intact(s) · "
                     f"{len(result.failed)} échec(s)"
                 )
@@ -897,15 +890,15 @@ def create_creators_widget(
         media_card = _card()
         media_layout = QVBoxLayout(media_card)
         media_layout.setContentsMargins(12, 10, 12, 10)
-        media_title = QLabel("💬 Sous-titres et pistes disponibles")
+        media_title = QLabel("Sous-titres et pistes disponibles")
         media_title.setObjectName("sectionTitle")
         media_layout.addWidget(media_title)
         media_row = QHBoxLayout()
         media_edit = QLineEdit()
         media_edit.setObjectName("creatorsTracksPath")
         media_edit.setPlaceholderText("Choisissez un fichier vidéo ou audio…")
-        browse_media_btn = QPushButton("📂 Parcourir…")
-        list_btn = QPushButton("🔍 Lister les pistes")
+        browse_media_btn = QPushButton("Parcourir…")
+        list_btn = QPushButton("Lister les pistes")
         list_btn.setObjectName("creatorsTracksList")
         media_row.addWidget(media_edit, stretch=1)
         media_row.addWidget(browse_media_btn)
@@ -915,7 +908,7 @@ def create_creators_widget(
         dest_edit = QLineEdit()
         dest_edit.setObjectName("creatorsTracksDest")
         dest_edit.setPlaceholderText("Dossier des fichiers extraits (par défaut : celui du média)")
-        browse_dest_btn = QPushButton("📂 Choisir…")
+        browse_dest_btn = QPushButton("Choisir…")
         dest_row.addWidget(dest_edit, stretch=1)
         dest_row.addWidget(browse_dest_btn)
         media_layout.addLayout(dest_row)
@@ -929,11 +922,11 @@ def create_creators_widget(
         track_combo.setObjectName("creatorsTracksSelect")
         select_row.addWidget(QLabel("Piste :"))
         select_row.addWidget(track_combo, stretch=1)
-        srt_btn = QPushButton("💬 Extraire en .srt")
+        srt_btn = QPushButton("Extraire en .srt")
         srt_btn.setObjectName("creatorsTracksSrt")
-        wav_btn = QPushButton("🎵 Extraire l'audio en .wav")
+        wav_btn = QPushButton("Extraire l'audio en .wav")
         wav_btn.setObjectName("creatorsTracksWav")
-        template_btn = QPushButton("📄 Créer un modèle de sous-titres")
+        template_btn = QPushButton("Créer un modèle de sous-titres")
         template_btn.setObjectName("creatorsTracksTemplate")
         select_row.addWidget(srt_btn)
         select_row.addWidget(wav_btn)
@@ -969,9 +962,7 @@ def create_creators_widget(
         def on_list() -> None:
             media = media_edit.text().strip()
             if not media:
-                QMessageBox.warning(
-                    widget, "Aucun média", "Choisissez d'abord un fichier."
-                )
+                QMessageBox.warning(widget, "Aucun média", "Choisissez d'abord un fichier.")
                 return
             list_btn.setEnabled(False)
             status_lbl.setText("Analyse des pistes en cours…")
@@ -997,9 +988,8 @@ def create_creators_widget(
                     "",
                 ]
                 for track in report.tracks:
-                    combo_label = (
-                        f"{track.kind_label} #{track.kind_index + 1} — {track.codec}"
-                        + (f" ({track.language})" if track.language else "")
+                    combo_label = f"{track.kind_label} #{track.kind_index + 1} — {track.codec}" + (
+                        f" ({track.language})" if track.language else ""
                     )
                     track_combo.addItem(combo_label, (track.kind, track.kind_index))
                     lines.append(f"  • {track.summary()}")
@@ -1009,8 +999,7 @@ def create_creators_widget(
                     lines.append("  (aucune piste reconnue)")
                 output_edit.setPlainText("\n".join(lines))
                 status_lbl.setText(
-                    f"{len(report.tracks)} piste(s) trouvée(s). "
-                    "Choisissez-en une pour l'extraire."
+                    f"{len(report.tracks)} piste(s) trouvée(s). Choisissez-en une pour l'extraire."
                 )
 
             _launch_job(job, done)
@@ -1056,8 +1045,8 @@ def create_creators_widget(
                     status_lbl.setText("Extraction impossible.")
                     _report_error(payload)
                     return
-                status_lbl.setText(f"✅ Sous-titres extraits : {payload}")
-                output_edit.appendPlainText(f"\n✅ Sous-titres extraits vers :\n{payload}")
+                status_lbl.setText(f"Sous-titres extraits : {payload}")
+                output_edit.appendPlainText(f"\nSous-titres extraits vers :\n{payload}")
 
             _launch_job(job, done)
 
@@ -1086,8 +1075,8 @@ def create_creators_widget(
                     status_lbl.setText("Extraction impossible.")
                     _report_error(payload)
                     return
-                status_lbl.setText(f"✅ Audio extrait : {payload}")
-                output_edit.appendPlainText(f"\n✅ Piste audio extraite vers :\n{payload}")
+                status_lbl.setText(f"Audio extrait : {payload}")
+                output_edit.appendPlainText(f"\nPiste audio extraite vers :\n{payload}")
 
             _launch_job(job, done)
 
@@ -1104,9 +1093,9 @@ def create_creators_widget(
                 if kind == "error":
                     _report_error(payload)
                     return
-                status_lbl.setText(f"✅ Modèle créé : {payload}")
+                status_lbl.setText(f"Modèle créé : {payload}")
                 output_edit.appendPlainText(
-                    f"\n✅ Modèle de sous-titres créé :\n{payload}\n"
+                    f"\nModèle de sous-titres créé :\n{payload}\n"
                     "Complétez-le dans un éditeur de texte (encodage UTF-8)."
                 )
 
@@ -1143,8 +1132,8 @@ def create_creators_widget(
         folder_edit.setPlaceholderText(
             "Dossier du projet (ou tout dossier de médias) à inventorier…"
         )
-        browse_btn = QPushButton("📂 Parcourir…")
-        scan_btn = QPushButton("📋 Analyser")
+        browse_btn = QPushButton("Parcourir…")
+        scan_btn = QPushButton("Analyser")
         scan_btn.setObjectName("creatorsInventoryScan")
         folder_row.addWidget(folder_edit, stretch=1)
         folder_row.addWidget(browse_btn)
@@ -1154,9 +1143,7 @@ def create_creators_widget(
         recursive_chk = QCheckBox("Inclure les sous-dossiers")
         recursive_chk.setObjectName("creatorsInventoryRecursive")
         recursive_chk.setChecked(True)
-        sources_chk = QCheckBox(
-            "Ajouter les adresses source de l'historique des téléchargements"
-        )
+        sources_chk = QCheckBox("Ajouter les adresses source de l'historique des téléchargements")
         sources_chk.setObjectName("creatorsInventorySources")
         sources_chk.setChecked(history is not None)
         sources_chk.setVisible(history is not None)
@@ -1178,8 +1165,16 @@ def create_creators_widget(
         table.setObjectName("creatorsInventoryTable")
         table.setHorizontalHeaderLabels(
             [
-                "Fichier", "Type", "Taille", "Durée", "Conteneur",
-                "Vidéo", "Audio", "Résolution", "FPS", "Source",
+                "Fichier",
+                "Type",
+                "Taille",
+                "Durée",
+                "Conteneur",
+                "Vidéo",
+                "Audio",
+                "Résolution",
+                "FPS",
+                "Source",
             ]
         )
         table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
@@ -1189,10 +1184,10 @@ def create_creators_widget(
         layout.addWidget(table, stretch=1)
 
         bottom_row = QHBoxLayout()
-        export_btn = QPushButton("💾 Exporter en CSV…")
+        export_btn = QPushButton("Exporter en CSV…")
         export_btn.setObjectName("creatorsInventoryExport")
         export_btn.setEnabled(False)
-        open_export_btn = QPushButton("📁 Ouvrir le dossier de l'export")
+        open_export_btn = QPushButton("Ouvrir le dossier de l'export")
         open_export_btn.setObjectName("creatorsInventoryOpenExport")
         open_export_btn.setEnabled(False)
         bottom_row.addWidget(export_btn)
@@ -1251,9 +1246,7 @@ def create_creators_widget(
                 by_kind: dict[str, int] = {}
                 for row in rows:
                     by_kind[row.kind.label] = by_kind.get(row.kind.label, 0) + 1
-                kind_txt = " · ".join(
-                    f"{v} {k.lower()}" for k, v in sorted(by_kind.items())
-                )
+                kind_txt = " · ".join(f"{v} {k.lower()}" for k, v in sorted(by_kind.items()))
                 summary_lbl.setText(
                     f"{len(rows)} média(s) inventorié(s) ({kind_txt}) — {format_bytes(total_size)} "
                     "au total. Aucun fichier n'a été modifié."
@@ -1281,7 +1274,7 @@ def create_creators_widget(
                     _report_error(payload)
                     return
                 state["last_export"] = payload
-                summary_lbl.setText(f"✅ Inventaire exporté : {payload}")
+                summary_lbl.setText(f"Inventaire exporté : {payload}")
                 open_export_btn.setEnabled(True)
 
             _launch_job(job, done)
@@ -1294,6 +1287,7 @@ def create_creators_widget(
                 or folder_edit.text()
             )
         )
+
         def on_open_export() -> None:
             if state["last_export"] is not None:
                 _safe(lambda: open_folder(state["last_export"]))
@@ -1315,7 +1309,7 @@ def create_creators_widget(
         list_card = _card()
         list_layout = QVBoxLayout(list_card)
         list_layout.setContentsMargins(12, 10, 12, 10)
-        list_title = QLabel("🎚 Profils dédiés aux logiciels de montage")
+        list_title = QLabel("Profils dédiés aux logiciels de montage")
         list_title.setObjectName("sectionTitle")
         list_layout.addWidget(list_title)
         list_note = QLabel(
@@ -1340,7 +1334,7 @@ def create_creators_widget(
         form_card = _card()
         form_layout = QVBoxLayout(form_card)
         form_layout.setContentsMargins(12, 10, 12, 10)
-        form_title = QLabel("➕ Créer un profil personnalisé")
+        form_title = QLabel("Créer un profil personnalisé")
         form_title.setObjectName("sectionTitle")
         form_layout.addWidget(form_title)
 
@@ -1377,9 +1371,7 @@ def create_creators_widget(
         container_edit.setPlaceholderText("Conteneurs recommandés (ex. MP4 / MOV)")
         video_fmt_edit = QLineEdit()
         video_fmt_edit.setObjectName("creatorsProfileVideoFmt")
-        video_fmt_edit.setPlaceholderText(
-            "Codecs vidéo recommandés (ex. ProRes 422, H.264 8 bits)"
-        )
+        video_fmt_edit.setPlaceholderText("Codecs vidéo recommandés (ex. ProRes 422, H.264 8 bits)")
         audio_fmt_edit = QLineEdit()
         audio_fmt_edit.setObjectName("creatorsProfileAudioFmt")
         audio_fmt_edit.setPlaceholderText("Audio recommandé (ex. PCM 48 kHz)")
@@ -1392,7 +1384,7 @@ def create_creators_widget(
         notes_edit.setPlaceholderText("Conseils / remarques (optionnel)")
         form_layout.addWidget(notes_edit)
 
-        save_btn = QPushButton("💾 Enregistrer le profil")
+        save_btn = QPushButton("Enregistrer le profil")
         save_btn.setObjectName("creatorsProfileSave")
         form_layout.addWidget(save_btn)
         form_layout.addStretch()
@@ -1422,7 +1414,7 @@ def create_creators_widget(
                 head.addStretch()
                 head.addWidget(badge)
                 if not profile.builtin:
-                    delete_btn = QPushButton("🗑")
+                    delete_btn = QPushButton("")
                     delete_btn.setFixedWidth(36)
                     delete_btn.clicked.connect(
                         lambda _checked=False, pid=profile.id: _remove_profile(pid)
@@ -1450,7 +1442,7 @@ def create_creators_widget(
                 formats.setWordWrap(True)
                 card_layout.addWidget(formats)
                 if profile.notes:
-                    notes = QLabel(f"💡 {profile.notes}")
+                    notes = QLabel(f"{profile.notes}")
                     notes.setWordWrap(True)
                     notes.setObjectName("mutedLabel")
                     card_layout.addWidget(notes)
@@ -1511,12 +1503,12 @@ def create_creators_widget(
 
     page_refreshers: dict[int, Callable[[], None]] = {}
 
-    tabs.addTab(build_projects_page(), "🗂 Mes projets")
-    tabs.addTab(build_prepare_page(), "📥 Préparer mon projet")
-    tabs.addTab(build_rename_page(), "✏️ Renommer par lots")
-    tabs.addTab(build_tracks_page(), "💬 Sous-titres & pistes")
-    tabs.addTab(build_inventory_page(), "📋 Inventaire & export")
-    tabs.addTab(build_profiles_page(), "🎚 Profils de montage")
+    tabs.addTab(build_projects_page(), "Mes projets")
+    tabs.addTab(build_prepare_page(), "Préparer mon projet")
+    tabs.addTab(build_rename_page(), "Renommer par lots")
+    tabs.addTab(build_tracks_page(), "Sous-titres et pistes")
+    tabs.addTab(build_inventory_page(), "Inventaire et export")
+    tabs.addTab(build_profiles_page(), "Profils de montage")
 
     def _on_tab_changed(index: int) -> None:
         refresher = page_refreshers.get(index)

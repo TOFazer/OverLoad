@@ -50,10 +50,14 @@ HIDDEN_IMPORTS = [
     "overload.media.analyzer",
     "overload.settings.store",
     "overload.ui.analyzer",
+    "overload.ui.components",
     "overload.ui.creators",
     "overload.ui.desktop",
+    "overload.ui.failure_text",
+    "overload.ui.icons",
     "overload.ui.theme",
     "overload.ui.web.server",
+    "overload.ui.window",
 ]
 
 EXCLUDES = [

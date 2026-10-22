@@ -10,6 +10,45 @@
 
 ---
 
+## Une interface repensée (v1.1)
+
+![Accueil d'OverLoad](docs/design/accueil.png)
+
+La version 1.1 introduit une interface entièrement redessinée pour
+`OverLoad.exe` :
+
+- **Thème sombre premium par défaut** (fond `#111318`, cartes `#1B1E27`, accent
+  violet `#8B5CF6`), **thème clair** complet et **six couleurs d'accent**
+  commutables en un clic, sans redémarrage.
+- **Navigation latérale** : Accueil, Téléchargements, Créateurs, Analyse
+  multimédia et Paramètres ; logo et nom OverLoad toujours visibles ; barre
+  supérieure avec recherche globale, raccourci de téléchargement et accès
+  rapide aux réglages.
+- **Accueil actionnable** : champ de lien central collable (Ctrl+V) avec
+  validation en direct, gros bouton **Télécharger**, dossier de destination
+  modifiable, indicateurs de débit / file / terminés / espace disque et
+  téléchargements récents avec vraies vignettes.
+- **Cartes de téléchargement lisibles** : vignette ou icône de format, nom,
+  hôte, badge d'état coloré, grande barre de progression animée, pourcentage,
+  taille, vitesse, temps restant et actions Pause / Reprendre / Relancer /
+  Annuler / Ouvrir / Retirer.
+- **Historique consultable** : filtres avec compteurs, présence réelle du
+  fichier vérifiée sur le disque, recherche instantanée.
+- **Messages d'erreur compréhensibles** : plus de « Échec » vague — cause
+  probable, explication et action recommandée en français, détail technique
+  disponible sur demande.
+- **Personnalisation** : thème sombre/clair, couleur d'accent, taille
+  d'interface (Compact / Normal / Grand), mémorisés dans `settings.json`.
+- **Interface adaptative** : la barre latérale se replie en rail d'icônes et les
+  cartes se réorganisent lorsque la fenêtre est réduite (testé de 1024 × 700 à
+  plein écran).
+
+Le détail du système de design (palette, typographie, espacements, états,
+animations) et toutes les captures de référence sont dans
+[`docs/DESIGN.md`](docs/DESIGN.md).
+
+---
+
 ## Fonctionnalités intégrées dans l'application (`OverLoad.exe`)
 
 - **Application de bureau Windows native (`PySide6` / Qt)** avec thèmes **Sombre** et **Clair**, courbe de débit en direct et préférences persistantes (`settings.json`).
@@ -96,4 +135,10 @@ overload
 ```bash
 python -m ruff check src tests scripts
 python -m pytest
+```
+
+Pour régénérer les captures de référence de l'interface :
+
+```bash
+python scripts/render_screenshots.py
 ```

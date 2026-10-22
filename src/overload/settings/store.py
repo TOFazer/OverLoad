@@ -12,7 +12,10 @@ from typing import Any
 from overload.core.paths import default_downloads_dir
 from overload.downloads.duplicates import DuplicatePolicy
 
-SETTINGS_SCHEMA_VERSION = 1
+SETTINGS_SCHEMA_VERSION = 2
+
+ACCENTS = ("violet", "blue", "cyan", "emerald", "amber", "rose")
+UI_SCALES = ("compact", "normal", "large")
 
 
 @dataclass(frozen=True)
@@ -26,6 +29,8 @@ class AppPreferences:
     max_retries: int = 3
     duplicate_policy: str = DuplicatePolicy.ASK.value
     theme: str = "dark"
+    accent: str = "violet"
+    ui_scale: str = "normal"
     schema_version: int = SETTINGS_SCHEMA_VERSION
 
     def to_dict(self) -> dict[str, Any]:
@@ -38,6 +43,8 @@ class AppPreferences:
             "max_retries": self.max_retries,
             "duplicate_policy": self.duplicate_policy,
             "theme": self.theme,
+            "accent": self.accent,
+            "ui_scale": self.ui_scale,
         }
 
 
@@ -86,6 +93,12 @@ class SettingsStore:
         if policy_raw not in {p.value for p in DuplicatePolicy}:
             policy_raw = DuplicatePolicy.ASK.value
         theme = "light" if raw.get("theme") == "light" else "dark"
+        accent = str(raw.get("accent", "violet"))
+        if accent not in ACCENTS:
+            accent = "violet"
+        ui_scale = str(raw.get("ui_scale", "normal"))
+        if ui_scale not in UI_SCALES:
+            ui_scale = "normal"
 
         return AppPreferences(
             destination_dir=str(raw.get("destination_dir") or default_dest),
@@ -95,6 +108,8 @@ class SettingsStore:
             max_retries=max(0, min(20, int(raw.get("max_retries", 3)))),
             duplicate_policy=policy_raw,
             theme=theme,
+            accent=accent,
+            ui_scale=ui_scale,
             schema_version=SETTINGS_SCHEMA_VERSION,
         )
 
