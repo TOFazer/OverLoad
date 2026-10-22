@@ -41,7 +41,6 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
-    QFileDialog,
     QFrame,
     QGraphicsOpacityEffect,
     QGridLayout,
@@ -90,6 +89,7 @@ from overload.ui.components import (
     Toast,
 )
 from overload.ui.failure_text import explain_failure
+from overload.ui.filedialogs import choose_directory, choose_open_file
 from overload.ui.theme import (
     ACCENTS as ACCENT_DEFS,
 )
@@ -140,7 +140,7 @@ SPEED_PRESETS = [
 
 
 def build_app_icon() -> QIcon:
-    """Icône applicative vectorielle : éclair blanc sur dégradé violet → bleu."""
+    """Icône applicative vectorielle : éclair crème sur dégradé mousse → sapin."""
     icon = QIcon()
     for size in (16, 24, 32, 48, 64, 128, 256):
         pix = QPixmap(size, size)
@@ -149,14 +149,14 @@ def build_app_icon() -> QIcon:
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         rect = QRectF(0, 0, size, size)
         grad = QLinearGradient(rect.topLeft(), rect.bottomRight())
-        grad.setColorAt(0.0, QColor("#8B5CF6"))
-        grad.setColorAt(1.0, QColor("#38BDF8"))
+        grad.setColorAt(0.0, QColor("#52765B"))  # vert mousse (OverX Forest)
+        grad.setColorAt(1.0, QColor("#14251B"))  # vert sapin (OverX Forest)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(grad)
         radius = size * 0.27
         painter.drawRoundedRect(rect, radius, radius)
         painter.scale(size / 24.0, size / 24.0)
-        icons.draw_glyph(painter, "zap", "#FFFFFF")
+        icons.draw_glyph(painter, "zap", "#E8EDE5")
         painter.end()
         icon.addPixmap(pix)
     return icon
@@ -266,8 +266,11 @@ class BatchDialog(QDialog):
         start.clicked.connect(self._start)
 
     def _import_txt(self) -> None:
-        chosen, _ = QFileDialog.getOpenFileName(
-            self, "Importer une liste de liens", "", "Fichiers texte (*.txt);;Tous (*)"
+        chosen = choose_open_file(
+            self,
+            "Importer une liste de liens",
+            fallback=self.window.settings_store.get().destination_dir,
+            name_filter="Fichiers texte (*.txt);;Tous les fichiers (*.*)",
         )
         if not chosen:
             return
@@ -621,8 +624,8 @@ class SettingsPage(QWidget):
 
     def _browse_destination(self) -> None:
         current = self.window.settings_store.get().destination_dir
-        folder = QFileDialog.getExistingDirectory(
-            self, "Choisir le dossier de téléchargements", current
+        folder = choose_directory(
+            self, "Choisir le dossier de téléchargements", preferred=current
         )
         if not folder:
             return
@@ -1504,8 +1507,8 @@ class OverloadWindow(QMainWindow):
 
     def choose_destination(self) -> None:
         current = self.settings_store.get().destination_dir
-        folder = QFileDialog.getExistingDirectory(
-            self, "Choisir le dossier de téléchargements", current
+        folder = choose_directory(
+            self, "Choisir le dossier de téléchargements", preferred=current
         )
         if folder:
             self.apply_destination(folder)

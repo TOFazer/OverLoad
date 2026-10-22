@@ -9,9 +9,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ICON_PATH = ROOT / "assets" / "overload.ico"
 
-# Dégradé violet → bleu électrique de l'identité OverLoad (identité 1.1).
-_GRADIENT_START = (139.0, 92.0, 246.0)  # #8B5CF6
-_GRADIENT_END = (56.0, 189.0, 248.0)  # #38BDF8
+# Dégradé mousse → sapin de l'identité OverX Forest (OverLoad, v1.3).
+_GRADIENT_START = (82.0, 118.0, 91.0)  # #52765B vert mousse
+_GRADIENT_END = (20.0, 37.0, 27.0)  # #14251B vert sapin
 
 # Polygone de l'éclair normalisé sur [0, 1] x [0, 1]
 _BOLT = [
@@ -59,9 +59,9 @@ def _render_png(size: int) -> bytes:
                 if not _in_rounded_rect(nx, ny):
                     continue
                 if _point_in_poly(nx, ny, _BOLT):
-                    r_sum += 255.0
-                    g_sum += 255.0
-                    b_sum += 255.0
+                    r_sum += 232.0  # crème naturel #E8EDE5
+                    g_sum += 237.0
+                    b_sum += 229.0
                 else:
                     t = (nx + ny) * 0.5
                     r0, g0, b0 = _GRADIENT_START

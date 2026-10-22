@@ -197,7 +197,7 @@ class GlyphBadge(QWidget):
 
 
 class LogoBadge(QWidget):
-    """Logo OverLoad : éclair blanc sur dégradé accent → bleu électrique."""
+    """Logo OverLoad : éclair crème sur dégradé accent → teinte profonde."""
 
     def __init__(self, palette: Palette, size: int = 40) -> None:
         super().__init__()
@@ -222,11 +222,12 @@ class LogoBadge(QWidget):
         painter.drawEllipse(rect.adjusted(-4, -4, 4, 4))
         grad = QLinearGradient(rect.topLeft(), rect.bottomRight())
         grad.setColorAt(0.0, qcolor(p.accent))
-        grad.setColorAt(1.0, qcolor(p.info))
+        # Forêt : dégradé mousse → sapin ; autres accents : accent → accent pressé.
+        grad.setColorAt(1.0, qcolor(p.accent_pressed))
         painter.setBrush(grad)
         radius = rect.width() * 0.3
         painter.drawRoundedRect(rect, radius, radius)
-        pix = icons.pixmap("zap", "#FFFFFF", int(self._size * 0.52))
+        pix = icons.pixmap("zap", "#E8EDE5", int(self._size * 0.52))
         offset = (self._size - int(self._size * 0.52)) / 2
         painter.drawPixmap(int(offset), int(offset), pix)
         painter.end()

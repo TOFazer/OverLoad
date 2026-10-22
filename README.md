@@ -10,6 +10,26 @@
 
 ---
 
+## Nouvelle identité « OverX Forest » + sélecteurs corrigés (v1.3)
+
+- 🌲 **OverX Forest, pour OverLoad uniquement** : forêt de nuit naturelle et
+  premium — vert sapin `#14251B` et charbon `#202722` en fonds, vert forêt
+  `#244A35` en couleur de marque, vert mousse `#52765B` pour les boutons, vert
+  sauge `#A8BFA5` en détails, crème naturel `#E8EDE5` pour le texte. Fini le
+  violet/bleu « gaming » par défaut : « Forêt » devient l'accent par défaut
+  (les autres accents restent disponibles dans Paramètres → Apparence, et un
+  ancien réglage resté sur le violet par défaut migre automatiquement).
+  L'icône de l'application et du programme d'installation suit la même
+  identité (éclair crème sur dégradé mousse → sapin).
+- 📂 **Sélecteurs de fichiers corrigés** : cliquer sur « Parcourir… » /
+  « Choisir… » n'ouvre plus la boîte « n'importe où ». Elle démarre toujours
+  au bon endroit : dossier du fichier déjà indiqué dans le champ, sinon
+  dernier dossier choisi dans OverLoad, sinon dossier de destination des
+  téléchargements, sinon `Téléchargements`. Cela concerne l'accueil, les
+  paramètres, l'analyse multimédia et tout l'espace Créateurs.
+
+---
+
 ## YouTube → un vrai fichier MP4 (v1.2)
 
 Collez un lien YouTube dans l'accueil, OverLoad s'occupe du reste :
@@ -57,9 +77,9 @@ la plateforme.
 La version 1.1 introduit une interface entièrement redessinée pour
 `OverLoad.exe` :
 
-- **Thème sombre premium par défaut** (fond `#111318`, cartes `#1B1E27`, accent
-  violet `#8B5CF6`), **thème clair** complet et **six couleurs d'accent**
-  commutables en un clic, sans redémarrage.
+- **Thème sombre premium par défaut**, **thème clair** complet et **couleurs
+  d'accent** commutables en un clic, sans redémarrage (palette remplacée par
+  OverX Forest en v1.3, voir ci-dessus).
 - **Navigation latérale** : Accueil, Téléchargements, Créateurs, Analyse
   multimédia et Paramètres ; logo et nom OverLoad toujours visibles ; barre
   supérieure avec recherche globale, raccourci de téléchargement et accès

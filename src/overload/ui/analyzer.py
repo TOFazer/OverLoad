@@ -7,13 +7,13 @@ import threading
 from pathlib import Path
 
 from overload.media.analyzer import Report, analyze, fps, number
+from overload.ui.filedialogs import choose_open_file
 
 
 def create_analyzer_widget():
     from PySide6.QtCore import Qt, QTimer
     from PySide6.QtWidgets import (
         QCheckBox,
-        QFileDialog,
         QHBoxLayout,
         QLabel,
         QLineEdit,
@@ -61,7 +61,10 @@ def create_analyzer_widget():
     report: Report | None = None
 
     def choose():
-        filename, _ = QFileDialog.getOpenFileName(widget, "Choisir un média", "", "Tous (*.*)")
+        # Démarre sur le fichier déjà indiqué (ou son dossier), jamais « n'importe où ».
+        filename = choose_open_file(
+            widget, "Choisir un média", preferred=path.text().strip() or None
+        )
         if filename:
             path.setText(filename)
 
