@@ -130,7 +130,14 @@ def open_folder(path: Path | str, *, opener=None) -> Path:  # noqa: ANN001
     try:
         if sys.platform == "win32":
             if select_file:
-                subprocess.Popen(["explorer.exe", f"/select,{resolved_target}"])
+                # Explorer analyse sa ligne de commande lui-même (et non comme un
+                # programme Windows classique). Si ``/select,`` et le chemin sont
+                # réunis dans le même argument, Python entoure tout l'argument de
+                # guillemets dès que le nom contient un espace. Explorer ignore alors
+                # parfois la sélection et ouvre son dossier par défaut (souvent
+                # « Documents »). Garder le commutateur et le chemin dans deux
+                # arguments ouvre le vrai dossier et sélectionne bien le fichier.
+                subprocess.Popen(["explorer.exe", "/select,", str(resolved_target)])
             else:
                 os.startfile(str(folder))  # type: ignore[attr-defined]
         elif sys.platform == "darwin":

@@ -1,5 +1,6 @@
 import pytest
 
+from overload.core import paths as path_helpers
 from overload.core.errors import OverloadError
 from overload.core.paths import open_folder
 from overload.history.store import DownloadHistoryStore
@@ -59,3 +60,26 @@ def test_open_folder_selects_file_or_falls_back_to_existing_parent(tmp_path):
     # Si même le dossier parent n'existe plus, erreur lisible
     with pytest.raises(OverloadError, match="introuvable"):
         open_folder(tmp_path / "disparu" / "clip.mp4", opener=fake_opener)
+
+
+def test_open_folder_windows_selects_spaced_file_in_its_real_directory(tmp_path, monkeypatch):
+    """Le chemin doit rester séparé de ``/select,`` pour l'analyseur d'Explorer.
+
+    Quand les deux étaient concaténés, un nom contenant des espaces faisait parfois
+    ouvrir « Documents » au lieu du dossier où OverLoad venait d'écrire le fichier.
+    """
+    media = tmp_path / "Mon film téléchargé.mp4"
+    media.write_bytes(b"ok")
+    calls: list[list[str]] = []
+
+    monkeypatch.setattr(path_helpers.sys, "platform", "win32")
+    monkeypatch.setattr(
+        path_helpers.subprocess,
+        "Popen",
+        lambda command: calls.append(command),
+    )
+
+    opened = open_folder(media)
+
+    assert opened == tmp_path.resolve()
+    assert calls == [["explorer.exe", "/select,", str(media.resolve())]]

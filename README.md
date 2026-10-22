@@ -10,6 +10,15 @@
 
 ---
 
+## Correctif Windows v2.0.1 — retrouver le fichier téléchargé
+
+- Le bouton **« Afficher dans le dossier »** ouvre maintenant l'emplacement réel
+  du téléchargement et sélectionne le fichier dans l'Explorateur Windows, y
+  compris lorsque son nom contient des espaces ou des accents. Il ne retombe
+  plus par erreur sur le dossier **Documents**.
+
+---
+
 ## 🌲 OverLoad 2.0 — une vraie refonte, pensée pour l'usage quotidien
 
 OverX impressionne quand on le découvre ; OverLoad doit impressionner quand on
