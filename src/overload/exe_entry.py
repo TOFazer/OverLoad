@@ -36,6 +36,8 @@ def main(argv: list[str] | None = None) -> int:
             if getattr(sys, "frozen", False):
                 import wave
 
+                import yt_dlp
+
                 from overload.media.analyzer import analyze
 
                 sample = tmp_dir / "test audio.wav"
@@ -47,6 +49,8 @@ def main(argv: list[str] | None = None) -> int:
                 report = analyze(sample)
                 if "sans erreur" not in report.integrity:
                     raise RuntimeError("Auto-test FFmpeg : " + report.explanation())
+                if not yt_dlp.version.__version__:
+                    raise RuntimeError("Auto-test YouTube : yt-dlp est inutilisable.")
             code = launch_desktop_app(
                 destination_dir=tmp_dir / "Downloads",
                 data_dir=tmp_dir / "Data",

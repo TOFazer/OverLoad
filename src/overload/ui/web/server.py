@@ -25,6 +25,7 @@ from overload.core.paths import open_folder
 from overload.downloads.duplicates import DuplicateDetectedError, DuplicatePolicy
 from overload.downloads.files import PART_SUFFIX, is_inside, sanitize_filename
 from overload.downloads.manager import DownloadManager
+from overload.downloads.youtube import QUALITY_CHOICES
 from overload.history.store import DownloadHistoryStore
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -307,7 +308,20 @@ class OverloadWebServer:
                             if app.demo_server is not None
                             else {"enabled": False}
                         )
+                        state["youtube"] = {
+                            "available": app.manager.youtube_available,
+                            "qualities": [
+                                {"value": value, "label": label}
+                                for value, label in QUALITY_CHOICES
+                            ],
+                        }
                         self._send_json(200, state)
+                        return
+
+                    if path == "/api/media/info":
+                        target_url = (query.get("url") or [""])[0]
+                        info = app.manager.inspect_media(target_url)
+                        self._send_json(200, info)
                         return
 
                     if path == "/api/history":
@@ -346,6 +360,7 @@ class OverloadWebServer:
                             filename=body.get("filename") or None,
                             duplicate_policy=body.get("duplicate_policy") or None,
                             start_paused=bool(body.get("start_paused", False)),
+                            quality=body.get("quality") or None,
                         )
                         self._send_json(
                             201 if snap is not None else 200,
@@ -367,6 +382,7 @@ class OverloadWebServer:
                             str(body.get("text", "")),
                             duplicate_policy=body.get("duplicate_policy") or None,
                             start_paused=bool(body.get("start_paused", False)),
+                            quality=body.get("quality") or None,
                         )
                         self._send_json(200, result.to_dict())
                         return
@@ -519,6 +535,7 @@ def create_web_server(
     demo_lab: bool = False,
     max_concurrent: int = 3,
     duplicate_policy: DuplicatePolicy = DuplicatePolicy.ASK,
+    youtube=None,
 ) -> OverloadWebServer:
     """Fabrique un serveur Web OverLoad prêt à l'emploi."""
     from overload.core.paths import default_data_dir, default_downloads_dir
@@ -534,6 +551,7 @@ def create_web_server(
         max_concurrent=max_concurrent,
         duplicate_policy=duplicate_policy,
         allowed_local_endpoints=allowed_endpoints,
+        youtube=youtube,
     )
     return OverloadWebServer(
         manager,

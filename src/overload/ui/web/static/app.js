@@ -149,6 +149,7 @@
             ${resumedPill}
           </div>
           <div class="task-url" title="${escapeHtml(task.url)}">${escapeHtml(task.url)}</div>
+          ${task.provider === "youtube" ? `<div class="task-provider">▶ YouTube · qualité ${escapeHtml(task.quality === "best" ? "meilleure disponible" : task.quality)}${task.media_title ? ` · ${escapeHtml(task.media_title)}` : ""}</div>` : ""}
         </div>
         <div class="task-actions">${actions}</div>
       </div>
@@ -376,6 +377,79 @@
     $("duplicate-modal").classList.remove("hidden");
   }
 
+  function formatMediaDuration(seconds) {
+    if (!seconds || seconds <= 0) return "";
+    const total = Math.round(seconds);
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const sec = total % 60;
+    return h > 0
+      ? `${h} h ${String(m).padStart(2, "0")} min`
+      : `${m} min ${String(sec).padStart(2, "0")} s`;
+  }
+
+  function hideMediaInfo() {
+    $("media-info").classList.add("hidden");
+    $("media-thumb").removeAttribute("src");
+    $("media-title").textContent = "";
+    $("media-subtitle").textContent = "";
+  }
+
+  function populateQualities(qualities) {
+    const select = $("single-quality-select");
+    if (!Array.isArray(qualities) || qualities.length === 0) return;
+    const current = select.value;
+    const known = new Set([...select.options].map((opt) => opt.value));
+    for (const item of qualities) {
+      if (!item || known.has(item.value)) continue;
+      const opt = document.createElement("option");
+      opt.value = item.value;
+      opt.textContent = item.label || item.value;
+      select.appendChild(opt);
+      known.add(item.value);
+    }
+    if (known.has(current)) select.value = current;
+  }
+
+  function renderMediaInfo(info) {
+    if (!info || info.provider !== "youtube") {
+      hideMediaInfo();
+      return;
+    }
+    $("media-info").classList.remove("hidden");
+    const thumb = $("media-thumb");
+    if (info.thumbnail_url) {
+      thumb.src = info.thumbnail_url;
+      thumb.alt = `Miniature de ${info.title}`;
+    } else {
+      thumb.removeAttribute("src");
+    }
+    $("media-title").textContent = info.title || "Vidéo YouTube";
+    const parts = ["YouTube"];
+    if (info.uploader) parts.push(info.uploader);
+    const duration = formatMediaDuration(info.duration_seconds);
+    if (duration) parts.push(duration);
+    if (info.heights && info.heights.length > 0) {
+      parts.push(`jusqu'à ${info.heights[0]}p`);
+    }
+    $("media-subtitle").textContent = parts.join(" · ");
+    populateQualities(info.qualities);
+  }
+
+  async function loadMediaInfo(url) {
+    try {
+      const info = await api(`/api/media/info?url=${encodeURIComponent(url)}`);
+      renderMediaInfo(info);
+      return info;
+    } catch (err) {
+      hideMediaInfo();
+      const banner = $("precheck-banner");
+      banner.className = "precheck-banner precheck-warn";
+      banner.textContent = `✕ ${err.message}`;
+      return null;
+    }
+  }
+
   async function submitSingleDownload(payload) {
     try {
       const res = await api("/api/downloads", { method: "POST", body: payload });
@@ -386,6 +460,7 @@
         $("single-url-input").value = "";
         $("single-filename-input").value = "";
         $("precheck-banner").classList.add("hidden");
+        hideMediaInfo();
       }
       await refreshState();
     } catch (err) {
@@ -508,7 +583,12 @@
           } else if (check.rejected.length > 0) {
             banner.className = "precheck-banner precheck-warn";
             banner.textContent = `✕ ${check.rejected[0].error.split("\n")[0]}`;
+          } else if (check.valid[0] && check.valid[0].provider === "youtube") {
+            banner.className = "precheck-banner";
+            banner.textContent = "✓ Vidéo YouTube détectée : récupération du titre et des qualités…";
+            await loadMediaInfo(raw);
           } else {
+            hideMediaInfo();
             banner.className = "precheck-banner";
             banner.textContent = `✓ Prêt à télécharger sous « ${check.valid[0].filename} »`;
           }
@@ -524,6 +604,7 @@
         url: $("single-url-input").value.trim(),
         filename: $("single-filename-input").value.trim() || null,
         start_paused: $("start-paused-check").checked,
+        quality: $("single-quality-select").value || "best",
       });
     });
 
@@ -558,6 +639,7 @@
             duplicate_policy:
               $("duplicate-policy").value === "ask" ? "skip" : $("duplicate-policy").value,
             start_paused: $("start-paused-check").checked,
+            quality: $("single-quality-select").value || "best",
           },
         });
         const s = res.summary;

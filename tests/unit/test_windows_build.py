@@ -76,3 +76,14 @@ def test_redesigned_ui_modules_are_bundled():
     spec = (SCRIPT.parents[1] / "OverLoad.spec").read_text(encoding="utf-8")
     assert '"overload.ui.window"' in spec
     assert '"overload.ui.icons"' in spec
+
+
+def test_youtube_extractor_is_bundled_in_the_exe():
+    """yt-dlp doit être collecté en entier : il charge ses extracteurs à l'exécution."""
+    assert "overload.downloads.youtube" in build.HIDDEN_IMPORTS
+    assert "yt_dlp" in build.HIDDEN_IMPORTS
+    source = SCRIPT.read_text(encoding="utf-8")
+    assert '"--collect-submodules", "yt_dlp"' in source
+    spec = (SCRIPT.parents[1] / "OverLoad.spec").read_text(encoding="utf-8")
+    assert '"overload.downloads.youtube"' in spec
+    assert 'collect_submodules("yt_dlp")' in spec

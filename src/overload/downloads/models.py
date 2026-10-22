@@ -68,6 +68,10 @@ class TaskSnapshot:
     created_at: str
     started_at: str | None
     finished_at: str | None
+    provider: str = "http"
+    quality: str = "best"
+    media_title: str = ""
+    thumbnail_url: str = ""
 
     @property
     def file_exists(self) -> bool:
@@ -113,6 +117,10 @@ class TaskSnapshot:
             "finished_at": self.finished_at,
             "file_exists": self.file_exists,
             "part_exists": self.part_exists,
+            "provider": self.provider,
+            "quality": self.quality,
+            "media_title": self.media_title,
+            "thumbnail_url": self.thumbnail_url,
         }
 
 

@@ -46,6 +46,7 @@ HIDDEN_IMPORTS = [
     "overload.downloads.state",
     "overload.downloads.telemetry",
     "overload.downloads.urls",
+    "overload.downloads.youtube",
     "overload.history.store",
     "overload.media.analyzer",
     "overload.settings.store",
@@ -58,6 +59,7 @@ HIDDEN_IMPORTS = [
     "overload.ui.theme",
     "overload.ui.web.server",
     "overload.ui.window",
+    "yt_dlp",
 ]
 
 EXCLUDES = [
@@ -107,6 +109,8 @@ def _common_pyinstaller_args(icon_path: Path) -> list[str]:
     ]
     for mod in HIDDEN_IMPORTS:
         cmd.extend(["--hidden-import", mod])
+    # yt-dlp charge ses extracteurs dynamiquement : PyInstaller doit les embarquer.
+    cmd.extend(["--collect-submodules", "yt_dlp"])
     for exc in EXCLUDES:
         cmd.extend(["--exclude-module", exc])
     return cmd

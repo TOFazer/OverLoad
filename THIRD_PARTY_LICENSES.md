@@ -6,10 +6,27 @@ Chaque dépendance distribuée avec **OverLoad** (en particulier dans `OverLoad.
 |---|---|---|---|
 | **PySide6-Essentials** (Qt for Python — `QtCore`, `QtGui`, `QtWidgets`) | Interface graphique native Windows embarquée dans l'application | **LGPL v3** | **Intégré** (`pyproject.toml`, livré en bibliothèques dynamiques dans l'édition portable) |
 | **PyInstaller** (bootloader d'exécution) | Empaquetage de `OverLoad.exe` | **GPL v2+** avec **exception « bootloader »** + **Apache-2.0** (hooks runtime) | **Intégré** (`scripts/build_windows.py`) |
-| **FFmpeg / ffprobe** (build LGPL, sans `--enable-gpl` ni `--enable-nonfree`) | Analyse locale et vérification de lecture | LGPL v2.1+ | Intégré (outils séparés embarqués, build BtbN LGPL) |
+| **FFmpeg / ffprobe** (build LGPL, sans `--enable-gpl` ni `--enable-nonfree`) | Analyse locale, vérification de lecture et fusion audio/vidéo MP4 | LGPL v2.1+ | Intégré (outils séparés embarqués, build BtbN LGPL) |
+| **yt-dlp** | Extraction et téléchargement des vidéos YouTube (bibliothèque Python) | **Unlicense** | **Intégré** (`pyproject.toml`, collecté par PyInstaller) |
 | **Inno Setup** | Installateur Windows (`OverLoad-Setup.exe`) | Licence Inno Setup | Script prêt (`packaging/OverLoad.iss`) |
 
-yt-dlp n'est pas intégré dans la version 1 (voir `docs/audit/PHASE0_AUDIT.md`, décision 2).
+## yt-dlp
+
+- `yt-dlp` est utilisé comme **bibliothèque Python** pour extraire les flux d'une
+  page YouTube publique ; aucune modification de son code n'est effectuée.
+- Licence **Unlicense** (domaine public) : https://github.com/yt-dlp/yt-dlp/blob/master/LICENSE
+- Le code source complet de la version installée est publié par le projet
+  (https://github.com/yt-dlp/yt-dlp) et peut être obtenu avec
+  `python -m pip download --no-binary :all: yt-dlp` pour satisfaire toute exigence
+  de redistribution.
+- OverLoad n'utilise yt-dlp que pour les vidéos que l'utilisateur est autorisé à
+  enregistrer. Aucune fonction de contournement de DRM, de connexion à un compte
+  ou de suppression de restriction d'accès n'est activée.
+- L'extraction dépend du fonctionnement de YouTube : une évolution de la
+  plateforme peut nécessiter une mise à jour de `yt-dlp`
+  (`python -m pip install -U yt-dlp` en développement).
+
+Les conditions d'utilisation de YouTube restent applicables à l'utilisateur.
 
 ## Obligations LGPL v3 (PySide6 / Qt)
 

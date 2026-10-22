@@ -20,9 +20,15 @@ _RESERVED = frozenset(
 _INVALID_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
 
-def sanitize_filename(name: str) -> str:
-    """Rend un nom utilisable sous Windows, sans séparateur ni nom réservé."""
-    base = name.replace("\\", "/").split("/")[-1]
+def sanitize_filename(name: str, *, strip_path: bool = True) -> str:
+    """Rend un nom utilisable sous Windows, sans séparateur ni nom réservé.
+
+    `strip_path=False` conserve le texte complet (utile pour un titre de vidéo
+    YouTube qui peut contenir « / ») tout en neutralisant les caractères interdits.
+    """
+    base = name
+    if strip_path:
+        base = name.replace("\\", "/").split("/")[-1]
     base = _INVALID_CHARS.sub("_", base).strip().rstrip(". ")
     if not base or base in {".", ".."}:
         return DEFAULT_NAME

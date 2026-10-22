@@ -2,11 +2,51 @@
 
 ⚡ **OverLoad** — Organise et prépare tes médias.
 
-🎬 Télécharge des fichiers depuis des adresses directes prises en charge, retrouve tes vidéos, musiques et images, analyse-les, prépare tes projets de montage et organise tes médias, directement dans une **application native Windows (`OverLoad.exe`)** sans dépendance à installer.
+🎬 Télécharge des vidéos YouTube et des fichiers depuis des adresses directes, retrouve tes vidéos, musiques et images, analyse-les, prépare tes projets de montage et organise tes médias, directement dans une **application native Windows (`OverLoad.exe`)** sans dépendance à installer.
 
-**Sources prises en charge (version 1) :** adresses HTTP(S) qui pointent directement vers un fichier. OverLoad ne contourne ni les protections d'accès, ni les DRM, ni les restrictions d'une plateforme.
+**Sources prises en charge (version 1.2) :** vidéos YouTube publiques (`youtube.com/watch?v=…`, `youtu.be/…`, `youtube.com/shorts/…`) et adresses HTTP(S) qui pointent directement vers un fichier. OverLoad ne contourne ni les protections d'accès, ni les DRM, ni les restrictions d'une plateforme : les vidéos privées, réservées aux membres ou soumises à un contrôle d'âge sont refusées avec un message explicite.
 
 **OverLoad — Your media, your way.**
+
+---
+
+## YouTube → un vrai fichier MP4 (v1.2)
+
+Collez un lien YouTube dans l'accueil, OverLoad s'occupe du reste :
+
+1. **Reconnaissance du lien et métadonnées** — OverLoad détecte la vidéo, récupère
+   son **titre**, son auteur, sa **durée**, sa **miniature** et les **qualités
+   disponibles**, puis nomme le fichier avec le titre réel.
+2. **Téléchargement des vrais flux** — les pistes vidéo et audio sont téléchargées
+   séparément avec [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) (intégré à
+   l'exécutable, aucune installation à faire).
+3. **Fusion en MP4 avec FFmpeg** — le conteneur MP4 est privilégié et le couple
+   **H.264 + AAC** est choisi en priorité pour maximiser la lecture dans VLC,
+   Windows et l'import dans Adobe Premiere Pro.
+4. **Vérification réelle du fichier** — la taille est contrôlée puis le fichier est
+   analysé avec FFprobe : au moins une piste vidéo et une durée strictement
+   positive sont exigées avant d'afficher « Terminé ». Un fichier vide ou
+   purement audio n'est jamais déclaré réussi.
+
+**Choix de la qualité** : menu déroulant à côté du bouton *Télécharger* —
+« Meilleure disponible », 2160p, 1440p, 1080p, 720p, 480p, 360p. La qualité est
+mémorisée par tâche et visible sur la carte de téléchargement.
+
+**Progression, pause, annulation et limite de vitesse** restent identiques aux
+téléchargements directs : la pause et l'annulation interrompent immédiatement
+yt-dlp, et la limite de vitesse globale s'applique aussi aux flux YouTube.
+
+**Compatibilité** : le MP4 H.264/AAC est le format le plus largement accepté, mais
+aucun outil ne peut garantir l'import dans toutes les versions d'un logiciel de
+montage. Les alertes de l'onglet **Analyse multimédia** restent la référence.
+
+**Limites assumées** : les vidéos privées, payantes, réservées aux membres,
+soumises à un contrôle d'âge ou géo-bloquées ne sont pas téléchargeables (OverLoad
+ne se connecte à aucun compte et ne contourne aucune protection). YouTube peut
+modifier ses mécanismes à tout moment ; mettre à jour `yt-dlp` rétablit alors
+l'extraction. Téléchargez uniquement les vidéos que vous êtes autorisé à
+enregistrer, dans le respect du droit d'auteur et des conditions d'utilisation de
+la plateforme.
 
 ---
 
@@ -24,8 +64,10 @@ La version 1.1 introduit une interface entièrement redessinée pour
   multimédia et Paramètres ; logo et nom OverLoad toujours visibles ; barre
   supérieure avec recherche globale, raccourci de téléchargement et accès
   rapide aux réglages.
-- **Accueil actionnable** : champ de lien central collable (Ctrl+V) avec
-  validation en direct, gros bouton **Télécharger**, dossier de destination
+- **Accueil actionnable** : champ de lien central collable (Ctrl+V) acceptant
+  YouTube et les fichiers directs, sélecteur de **qualité vidéo**, validation en
+  direct avec titre, auteur, durée et qualités disponibles, gros bouton
+  **Télécharger**, dossier de destination
   modifiable, indicateurs de débit / file / terminés / espace disque et
   téléchargements récents avec vraies vignettes.
 - **Cartes de téléchargement lisibles** : vignette ou icône de format, nom,
@@ -52,6 +94,7 @@ animations) et toutes les captures de référence sont dans
 ## Fonctionnalités intégrées dans l'application (`OverLoad.exe`)
 
 - **Application de bureau Windows native (`PySide6` / Qt)** avec thèmes **Sombre** et **Clair**, courbe de débit en direct et préférences persistantes (`settings.json`).
+- **Vidéos YouTube en MP4** : métadonnées (titre, auteur, durée, miniature, qualités), choix de la qualité, fusion audio/vidéo FFmpeg et vérification FFprobe du fichier final.
 - **Téléchargements simultanés** avec limite active configurable à chaud (`1` à `16`).
 - **Pause, reprise HTTP Range (`206 Partial Content`) et reprise automatique** avec recul exponentiel après une coupure réseau ou une erreur temporaire du serveur (`408`, `429`, `5xx`), sans jamais perdre le fichier `.part`.
 - **Détection intelligente des fichiers déjà présents** (dossier cible, file active, historique SQLite, ou `.part` reprenable) avec boîte de dialogue dédiée (*Ouvrir le dossier existant*, *Ignorer*, *Télécharger une copie « (2) »*).
@@ -94,6 +137,10 @@ pas une certification pour une version précise d'un logiciel de montage.
 
 FFmpeg et FFprobe LGPL sont embarqués dans les distributions Windows. En développement,
 installez ces deux outils dans le PATH. Leurs processus n'accèdent qu'aux fichiers locaux.
+
+`yt-dlp` (licence Unlicense) est également embarqué dans `OverLoad.exe` : aucune
+installation Python n'est requise pour télécharger une vidéo YouTube. En
+développement, `pip install -e .` l'installe automatiquement.
 
 ---
 

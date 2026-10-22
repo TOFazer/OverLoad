@@ -41,16 +41,30 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     dl_p = sub.add_parser("download", help="Télécharge un ou plusieurs liens en ligne de commande.")
-    dl_p.add_argument("urls", nargs="+", help="Adresses directes HTTP(S) à télécharger.")
+    dl_p.add_argument(
+        "urls",
+        nargs="+",
+        help="Vidéos YouTube publiques ou adresses directes HTTP(S) à télécharger.",
+    )
     dl_p.add_argument("--dest", type=Path, default=None, help="Dossier de destination.")
     dl_p.add_argument("--max-concurrent", type=int, default=3)
     dl_p.add_argument("--speed-limit-kbps", type=int, default=0)
+    dl_p.add_argument(
+        "--quality",
+        default="best",
+        help="Qualité YouTube : best (défaut), 2160p, 1440p, 1080p, 720p, 480p, 360p.",
+    )
 
     batch_p = sub.add_parser("batch", help="Télécharge tous les liens d'un fichier texte.")
     batch_p.add_argument("file", type=Path, help="Fichier .txt contenant une adresse par ligne.")
     batch_p.add_argument("--dest", type=Path, default=None, help="Dossier de destination.")
     batch_p.add_argument("--max-concurrent", type=int, default=3)
     batch_p.add_argument("--speed-limit-kbps", type=int, default=0)
+    batch_p.add_argument(
+        "--quality",
+        default="best",
+        help="Qualité YouTube appliquée aux liens vidéo du fichier.",
+    )
 
     return parser
 
@@ -92,6 +106,7 @@ def _run_cli_batch(
     dest: Path | None,
     max_concurrent: int,
     speed_limit_kbps: int,
+    quality: str = "best",
 ) -> int:
     folder = dest or default_downloads_dir()
     limit_bps = speed_limit_kbps * 1024 if speed_limit_kbps > 0 else None
@@ -105,7 +120,7 @@ def _run_cli_batch(
             duplicate_policy=DuplicatePolicy.SKIP,
         ) as manager,
     ):
-        res = manager.enqueue_batch(urls_source)
+        res = manager.enqueue_batch(urls_source, quality=quality)
         print(
             f"{len(res.added)} ajouté(s), {len(res.skipped_duplicates)} doublon(s) ignoré(s), "
             f"{len(res.rejected)} rejeté(s).",
@@ -144,6 +159,7 @@ def main(argv: list[str] | None = None) -> int:
                 dest=args.dest,
                 max_concurrent=args.max_concurrent,
                 speed_limit_kbps=args.speed_limit_kbps,
+                quality=args.quality,
             )
         if args.command == "batch":
             if not args.file.is_file():
@@ -157,6 +173,7 @@ def main(argv: list[str] | None = None) -> int:
                 dest=args.dest,
                 max_concurrent=args.max_concurrent,
                 speed_limit_kbps=args.speed_limit_kbps,
+                quality=args.quality,
             )
 
         has_display = bool(

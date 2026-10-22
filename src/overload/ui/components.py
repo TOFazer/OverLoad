@@ -1183,6 +1183,10 @@ class DownloadCard(QFrame):
         label, key = state_presentation(snap)
         self._set_pill(label, key)
         host = host_of(snap.url) or "lien direct"
+        if getattr(snap, "provider", "http") == "youtube":
+            quality = getattr(snap, "quality", "best")
+            quality_txt = "meilleure qualité" if quality == "best" else quality
+            host = f"YouTube · {quality_txt}"
         ext = extension_of(snap.filename).upper() or "FICHIER"
         added = ""
         try:
