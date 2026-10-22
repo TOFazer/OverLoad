@@ -299,3 +299,36 @@ def test_verify_rejects_an_audio_only_file(tmp_path, monkeypatch):
     )
     with pytest.raises(OverloadError, match="piste vidéo"):
         verify_downloaded_media(sample, ffprobe_available=lambda: True)
+
+
+def test_import_crash_becomes_a_clear_error(tmp_path, monkeypatch):
+    """Un `import yt_dlp` cassé (autre qu'ImportError) ne doit jamais fuiter."""
+    import builtins
+
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "yt_dlp":
+            raise RuntimeError("fichier yt_dlp.py corrompu dans le paquet")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    extractor = YoutubeExtractor()
+    assert extractor.available() is False
+    with pytest.raises(OverloadError, match="yt-dlp"):
+        extractor.probe("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+
+
+def test_probe_translates_unexpected_extractor_crashes():
+    """Un bug interne de l'extracteur devient une OverloadError, pas un crash."""
+
+    class BoomYDL(FakeYDL):
+        def extract_info(self, url: str, download: bool = False) -> dict:
+            raise AttributeError("'NoneType' object has no attribute 'player'")
+
+    class BoomModule:
+        YoutubeDL = BoomYDL
+
+    extractor = YoutubeExtractor(module=BoomModule)
+    with pytest.raises(OverloadError):
+        extractor.probe("https://www.youtube.com/watch?v=dQw4w9WgXcQ")

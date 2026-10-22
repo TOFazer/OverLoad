@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import threading
+import time
 
 import pytest
 
@@ -11,6 +13,17 @@ QtWidgets = pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
 
 def _make_app():
     return QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+
+def _wait_until(app, predicate, timeout: float = 10.0) -> bool:
+    """Fait tourner la boucle Qt jusqu'à la condition (l'ajout est asynchrone)."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        app.processEvents()
+        if predicate():
+            return True
+        time.sleep(0.01)
+    return False
 
 
 def test_desktop_window_renders_tasks_history_and_settings(server, tmp_path):
@@ -127,8 +140,9 @@ def test_desktop_download_from_composer_updates_ui(server, tmp_path):
         win.download_from_composer()
         app.processEvents()
 
-        assert win.url_edit.text() == ""
-        assert len(manager.list_tasks()) == 1
+        # L'ajout est asynchrone : la boucle Qt doit le digérer.
+        assert _wait_until(app, lambda: len(manager.list_tasks()) == 1)
+        assert _wait_until(app, lambda: win.url_edit.text() == "")
         assert manager.wait_all(timeout=10)
         win.refresh_all()
         app.processEvents()
@@ -289,3 +303,148 @@ def test_desktop_v2_navigation_library_and_creators_hub(tmp_path):
         )
         assert analyzer_path.text().endswith("clip-bibliotheque.mp4")
         win.close()
+
+
+VIDEO_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+
+
+class _RecordingYoutube:
+    """Extracteur YouTube simulé : probe contrôlable, téléchargement immédiat."""
+
+    def __init__(self, probe_hook=None):
+        self._probe_hook = probe_hook
+        self.download_calls = 0
+
+    def available(self):
+        return True
+
+    def probe(self, url):
+        from overload.downloads.youtube import MediaInfo
+
+        if self._probe_hook is not None:
+            self._probe_hook(url)
+        return MediaInfo(url=url, video_id="dQw4w9WgXcQ", title="Film de test")
+
+    def download(self, url, target, **kwargs):
+        from overload.downloads.youtube import MediaInfo
+
+        self.download_calls += 1
+        target.write_bytes(b"mp4" * 32)
+        return MediaInfo(url=url, video_id="dQw4w9WgXcQ", title="Film de test")
+
+
+def _make_youtube_window(tmp_path, extractor):
+    from overload.downloads.manager import DownloadManager
+    from overload.history.store import DownloadHistoryStore
+    from overload.settings.store import SettingsStore
+    from overload.ui.desktop import create_main_window
+
+    app = _make_app()
+    settings_store = SettingsStore(tmp_path / "settings.json")
+    history = DownloadHistoryStore(tmp_path / "library.db")
+    manager = DownloadManager(tmp_path / "downloads", history=history, youtube=extractor)
+    win = create_main_window(manager, history, settings_store, data_dir=tmp_path)
+    win.show()
+    app.processEvents()
+    return app, win, manager, history
+
+
+def test_download_from_composer_reports_unexpected_probe_errors(tmp_path, monkeypatch):
+    """Une erreur interne du module YouTube doit s'afficher, jamais disparaître."""
+
+    def boom(_url):
+        raise AttributeError("'NoneType' object has no attribute 'player'")
+
+    app, win, manager, history = _make_youtube_window(tmp_path, _RecordingYoutube(boom))
+    errors: list[object] = []
+    monkeypatch.setattr(win, "show_error", lambda exc: errors.append(exc))
+    try:
+        win.url_edit.setText(VIDEO_URL)
+        win.download_from_composer()
+
+        assert _wait_until(app, lambda: errors), "aucun dialogue d'erreur affiché"
+        assert manager.list_tasks() == []
+        assert _wait_until(app, lambda: win.download_btn.isEnabled())
+        win.close()
+    finally:
+        manager.shutdown()
+        history.close()
+
+
+def test_download_from_composer_shows_busy_state_then_completes(tmp_path):
+    """Le clic montre « Analyse du lien… » et n'utilise jamais le thread graphique."""
+    gate = threading.Event()
+    extractor = _RecordingYoutube(lambda _url: gate.wait(timeout=5))
+    app, win, manager, history = _make_youtube_window(tmp_path, extractor)
+
+    try:
+        win.url_edit.setText(VIDEO_URL)
+        win.download_from_composer()
+        app.processEvents()
+
+        # Immédiatement après le clic : retour visible, bouton inutilisable.
+        assert win._composer_busy is True
+        assert not win.download_btn.isEnabled()
+        assert "Analyse" in win.url_hint.text()
+
+        gate.set()
+        assert _wait_until(app, lambda: len(manager.list_tasks()) == 1)
+        assert _wait_until(app, lambda: win.download_btn.isEnabled())
+        assert "ajouté à la file" in win.toast_widget.label.text().lower()
+        assert manager.wait_all(timeout=10)
+        win.close()
+    finally:
+        gate.set()
+        manager.shutdown()
+        history.close()
+
+
+def test_download_from_composer_reports_skipped_duplicate(tmp_path, monkeypatch):
+    """Doublon ignoré = message explicite, jamais un clic sans effet."""
+    app, win, manager, history = _make_youtube_window(tmp_path, _RecordingYoutube())
+    monkeypatch.setattr(manager, "enqueue", lambda url, **kwargs: None)
+
+    try:
+        win.url_edit.setText(VIDEO_URL)
+        win.download_from_composer()
+
+        assert _wait_until(
+            app, lambda: "ignoré" in win.toast_widget.label.text().lower()
+        )
+        assert manager.list_tasks() == []
+        win.close()
+    finally:
+        manager.shutdown()
+        history.close()
+
+
+def test_download_from_composer_timeout_is_explicit_and_late_success_still_lands(
+    tmp_path, monkeypatch
+):
+    """Délai maximal : erreur explicite, puis la tâche tardive reste visible."""
+    gate = threading.Event()
+    extractor = _RecordingYoutube(lambda _url: gate.wait(timeout=5))
+    app, win, manager, history = _make_youtube_window(tmp_path, extractor)
+    errors: list[object] = []
+    monkeypatch.setattr(win, "show_error", lambda exc: errors.append(exc))
+    win.async_timeout_ms = 100
+
+    try:
+        win.url_edit.setText(VIDEO_URL)
+        win.download_from_composer()
+
+        assert _wait_until(app, lambda: errors, timeout=5), "délai maximal non signalé"
+        assert "temps" in str(errors[0]).lower()
+        assert _wait_until(app, lambda: win.download_btn.isEnabled())
+
+        # L'analyse finit par aboutir : la tâche apparaît malgré tout.
+        gate.set()
+        assert _wait_until(app, lambda: len(manager.list_tasks()) == 1)
+        assert _wait_until(
+            app, lambda: "ajouté à la file" in win.toast_widget.label.text().lower()
+        )
+        win.close()
+    finally:
+        gate.set()
+        manager.shutdown()
+        history.close()

@@ -547,6 +547,11 @@ class DownloadManager:
             except OverloadError as exc:
                 rejected.append(RejectedLink(line=line_no, url=raw_url, error=str(exc)))
                 continue
+            except Exception as exc:  # noqa: BLE001 - une ligne faible n'arrête pas le lot
+                rejected.append(
+                    RejectedLink(line=line_no, url=raw_url, error=f"{type(exc).__name__}: {exc}")
+                )
+                continue
 
             try:
                 with self._cond:
