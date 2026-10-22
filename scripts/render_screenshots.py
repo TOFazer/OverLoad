@@ -75,7 +75,7 @@ def _build_demo(tmp: Path):
 
     downloads = tmp / "OverLoad"
     downloads.mkdir(parents=True, exist_ok=True)
-    _make_image(downloads / "DSC_0421.jpg", "#8B5CF6", "#38BDF8", "PHOTO 0421")
+    _make_image(downloads / "DSC_0421.jpg", "#52765B", "#14251B", "PHOTO 0421")
     _make_image(downloads / "Moodboard ete.jpg", "#F43F5E", "#FBBF24", "MOODBOARD")
     (downloads / "Soundtrack - Nuit.wav").write_bytes(b"RIFF" + os.urandom(2_400_000))
     (downloads / "Rushes - sequence 04.mkv").write_bytes(os.urandom(120_000))

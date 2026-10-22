@@ -55,6 +55,44 @@ def default_downloads_dir() -> Path:
     return folder
 
 
+def dialog_start_dir(
+    preferred: Path | str | None = None,
+    *,
+    fallback: Path | str | None = None,
+) -> Path:
+    """Dossier de départ déterministe pour les sélecteurs de fichiers.
+
+    Avant, plusieurs sélecteurs recevaient ``""`` : Qt/Windows ouvrait alors la
+    boîte dans le dossier de travail du processus ou un dossier « mémorisé »
+    quelconque — l'utilisateur avait l'impression d'être « ramené n'importe
+    où ». Ici, le point de départ est toujours explicite, dans cet ordre :
+
+    1. ``preferred`` : dossier existant tel quel, dossier parent si c'est un
+       fichier (existant ou simplement visé, ex. champ déjà rempli) ;
+    2. ``fallback`` : même logique (ex. dossier de destination des
+       téléchargements, dernier dossier utilisé) ;
+    3. ``~/Downloads`` ou ``~/Téléchargements`` s'il existe, sinon le dossier
+       personnel.
+    """
+    for candidate in (preferred, fallback):
+        if candidate is None:
+            continue
+        text = str(candidate).strip().strip('"')
+        if not text:
+            continue
+        path = Path(text).expanduser()
+        if path.is_dir():
+            return path.resolve()
+        if path.is_file():
+            return path.parent.resolve()
+        if path.parent.is_dir():
+            return path.parent.resolve()
+    for home_candidate in (Path.home() / "Downloads", Path.home() / "Téléchargements"):
+        if home_candidate.is_dir():
+            return home_candidate.resolve()
+    return Path.home().resolve()
+
+
 def open_folder(path: Path | str, *, opener=None) -> Path:  # noqa: ANN001
     """Ouvre un dossier (ou sélectionne un fichier dans son dossier parent).
 

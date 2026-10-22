@@ -33,7 +33,7 @@ def is_pyside6_available() -> bool:
 
 
 def create_app_icon() -> QIcon:
-    """Icône vectorielle d'OverLoad (éclair blanc sur dégradé violet → bleu)."""
+    """Icône vectorielle d'OverLoad (éclair crème sur dégradé mousse → sapin)."""
     from overload.ui.window import build_app_icon
 
     return build_app_icon()

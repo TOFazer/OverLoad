@@ -12,9 +12,12 @@ from typing import Any
 from overload.core.paths import default_downloads_dir
 from overload.downloads.duplicates import DuplicatePolicy
 
-SETTINGS_SCHEMA_VERSION = 2
+SETTINGS_SCHEMA_VERSION = 3
 
-ACCENTS = ("violet", "blue", "cyan", "emerald", "amber", "rose")
+# « forest » (OverX Forest) est l'accent par défaut depuis la v1.3 ; les autres
+# accents restent choisisables dans Paramètres → Apparence.
+ACCENTS = ("forest", "violet", "blue", "cyan", "emerald", "amber", "rose")
+DEFAULT_ACCENT = "forest"
 UI_SCALES = ("compact", "normal", "large")
 
 
@@ -29,7 +32,7 @@ class AppPreferences:
     max_retries: int = 3
     duplicate_policy: str = DuplicatePolicy.ASK.value
     theme: str = "dark"
-    accent: str = "violet"
+    accent: str = DEFAULT_ACCENT
     ui_scale: str = "normal"
     schema_version: int = SETTINGS_SCHEMA_VERSION
 
@@ -93,9 +96,16 @@ class SettingsStore:
         if policy_raw not in {p.value for p in DuplicatePolicy}:
             policy_raw = DuplicatePolicy.ASK.value
         theme = "light" if raw.get("theme") == "light" else "dark"
-        accent = str(raw.get("accent", "violet"))
+        accent = str(raw.get("accent", DEFAULT_ACCENT))
         if accent not in ACCENTS:
-            accent = "violet"
+            accent = DEFAULT_ACCENT
+        # Migration unique (schéma < 3) : « violet » était l'ancien accent par
+        # défaut, il devient « forest ». Un violet choisi après la migration
+        # (schéma 3) est conservé tel quel.
+        raw_schema = raw.get("schema_version")
+        stored_schema = raw_schema if isinstance(raw_schema, int) else 1
+        if stored_schema < SETTINGS_SCHEMA_VERSION and accent == "violet":
+            accent = DEFAULT_ACCENT
         ui_scale = str(raw.get("ui_scale", "normal"))
         if ui_scale not in UI_SCALES:
             ui_scale = "normal"

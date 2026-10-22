@@ -1,9 +1,11 @@
-# OverLoad — identité visuelle et interface (v1.1)
+# OverLoad — identité visuelle et interface (v1.3 « OverX Forest »)
 
 Cette page documente le système de design de l'application native `OverLoad.exe`
 (PySide6 / Qt Widgets). Les captures sont générées automatiquement par
 `python scripts/render_screenshots.py` et servent de référence pour toute
-évolution future.
+évolution future. ⚠️ Les captures ci-dessous montrent encore la structure
+v1.1 (ancienne palette) : à régénérer sous Windows avec la palette OverX
+Forest de la v1.3 (`python scripts/render_screenshots.py`).
 
 ![Accueil](design/accueil.png)
 
@@ -21,32 +23,44 @@ Cette page documente le système de design de l'application native `OverLoad.exe
 4. **Tout est vivant.** Les barres de progression s'animent, les pages
    apparaissent en fondu, les survols réagissent, mais rien ne clignote.
 
-## 2. Palette
+## 2. Palette « OverX Forest »
+
+Depuis la v1.3, OverLoad adopte l'identité **OverX Forest** (forêt de nuit) :
+naturelle, profonde et premium — aucun vert fluo « gaming ». On privilégie le
+vert sapin et le charbon, le vert mousse sert aux boutons et éléments actifs,
+le vert sauge aux détails et au texte secondaire.
 
 | Rôle | Sombre | Clair |
 | --- | --- | --- |
-| Fond (canvas) | `#111318` | `#F3F4F9` |
-| Barre latérale | `#0D0F14` | `#FFFFFF` |
-| Cartes / surfaces | `#1B1E27` | `#FFFFFF` |
-| Surfaces secondaires | `#20242F` | `#F7F8FC` |
-| Champs de saisie | `#151821` | `#FFFFFF` |
-| Bordures | `#292E3B` | `#E3E6EF` |
-| Texte principal | `#F3F5F9` | `#141722` |
-| Texte secondaire | `#A3ABBD` | `#5B6478` |
-| Accent par défaut | `#8B5CF6` | `#7C3AED` |
-| Information | `#38BDF8` | `#0284C7` |
-| Succès | `#34D399` | `#059669` |
-| Avertissement | `#FBBF24` | `#B45309` |
-| Erreur | `#F87171` | `#DC2626` |
+| Fond (canvas) — vert sapin | `#14251B` | `#EDF2EA` |
+| Barre latérale | `#0E1B13` | `#F7FAF3` |
+| Cartes / surfaces — charbon | `#202722` | `#FCFDF9` |
+| Surfaces secondaires | `#28312B` | `#EEF4E9` |
+| Champs de saisie | `#16241B` | `#FFFFFF` |
+| Bordures | `#2D3D33` | `#CFDCC8` |
+| Texte principal — crème naturel | `#E8EDE5` | `#14251B` |
+| Texte secondaire — vert sauge | `#A8BFA5` | `#3F5747` |
+| Accent par défaut « Forêt » | `#52765B` (mousse) | `#244A35` (forêt) |
+| Information | `#8FB8C4` | `#2F6B7A` |
+| Succès | `#86B98A` | `#2E7D4F` |
+| Avertissement | `#D9B36A` | `#96690F` |
+| Erreur | `#E38B7D` | `#B23A2C` |
 
-Accents disponibles : violet (défaut), bleu électrique, cyan, émeraude, ambre,
-rose. Ils sont définis une seule fois dans `src/overload/ui/theme.py` et
-persistés dans `settings.json` (clé `accent`).
+Références OverX Forest : sapin `#14251B`, forêt `#244A35`, mousse `#52765B`,
+sauge `#A8BFA5`, crème `#E8EDE5`, charbon `#202722` (constantes `FOREST_*` dans
+`src/overload/ui/theme.py`).
+
+Accents disponibles : **forêt (défaut)**, violet, bleu électrique, cyan,
+émeraude, ambre, rose. Le socle sapin/charbon reste commun à tous les accents.
+Ils sont définis une seule fois dans `src/overload/ui/theme.py` et persistés
+dans `settings.json` (clé `accent`). Migration unique (schéma 3) : un ancien
+réglage resté sur `violet` — l'ancien défaut — bascule sur `forest` ; un violet
+choisi explicitement après la migration est conservé.
 
 ## 3. Typographie et espacements
 
-- **Titres** : Segoe UI Variable Display (repli : Segoe UI, Inter, Arial).
-- **Texte** : Segoe UI Variable Text, 13 px par défaut.
+- **Titres et texte** : Manrope / Inter si installées (signature OverX), sinon
+  Segoe UI Variable (Display/Text), Segoe UI, Arial. Texte 13 px par défaut.
 - **Chiffres** : alignement tabulaire pour toutes les métriques.
 - **Échelle d'interface** : Compact (0,92), Normal (1,0), Grand (1,12). Toutes
   les tailles de la feuille QSS et des composants dessinés sont multipliées par
@@ -116,7 +130,7 @@ colonnes et l'illustration du héro est masquée.
 
 ![Paramètres](design/parametres.png)
 
-- Thème sombre / clair, six accents, trois tailles d'interface, appliqués
+- Thème sombre / clair, sept accents (forêt par défaut), trois tailles d'interface, appliqués
   instantanément et mémorisés.
 - Dossier de destination, simultanéité (1 à 16), limite de débit, politique de
   doublons, reprise automatique et nombre d'essais.
@@ -191,6 +205,7 @@ pas visible (Qt suspend les timers des widgets masqués).
 | `ui/window.py` | fenêtre principale, pages Accueil / Téléchargements / Paramètres, navigation |
 | `ui/failure_text.py` | traduction des erreurs en explications utilisateur |
 | `ui/creators.py` | onglet Créateurs (logique inchangée, présentation harmonisée) |
+| `ui/filedialogs.py` | sélecteurs de fichiers : dossier de départ déterministe (champ courant → dernier dossier choisi → destination → `~/Downloads`), jamais un emplacement « au hasard » |
 | `ui/analyzer.py` | analyse multimédia locale |
 | `settings/store.py` | persistance thème, accent et taille d'interface |
 

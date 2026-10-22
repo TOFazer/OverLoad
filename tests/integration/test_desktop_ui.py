@@ -79,7 +79,7 @@ def test_desktop_navigation_and_theme_switch(tmp_path):
         win.toggle_theme()
         app.processEvents()
         assert settings_store.get().theme == "light"
-        assert win.tokens.text == palette("light", "violet").text
+        assert win.tokens.text == palette("light", "forest").text
 
         win.set_appearance(accent="blue", ui_scale="large")
         app.processEvents()

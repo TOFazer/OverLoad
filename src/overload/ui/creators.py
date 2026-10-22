@@ -43,6 +43,12 @@ from overload.creators.subtitles import (
 )
 from overload.creators.workspace import CreatorsWorkspace
 from overload.downloads.duplicates import DuplicatePolicy
+from overload.ui.filedialogs import (
+    choose_directory,
+    choose_open_file,
+    choose_open_files,
+    choose_save_file,
+)
 
 SAFETY_NOTE = (
     "Protection des originaux : rien n'est déplacé, renommé ou supprimé sur vos fichiers "
@@ -73,7 +79,6 @@ def create_creators_widget(
     from PySide6.QtWidgets import (
         QCheckBox,
         QComboBox,
-        QFileDialog,
         QFrame,
         QHBoxLayout,
         QHeaderView,
@@ -334,10 +339,12 @@ def create_creators_widget(
 
         def on_browse_parent() -> None:
             videos = Path.home() / "Videos"
-            start = parent_edit.text().strip() or (
-                str(videos) if videos.is_dir() else str(Path.home())
+            folder = choose_directory(
+                widget,
+                "Dossier parent du projet",
+                preferred=parent_edit.text().strip() or None,
+                fallback=str(videos) if videos.is_dir() else None,
             )
-            folder = QFileDialog.getExistingDirectory(widget, "Dossier parent du projet", start)
             if folder:
                 parent_edit.setText(folder)
 
@@ -515,14 +522,25 @@ def create_creators_widget(
             dest_edit.setText(str(project.path))
 
         def on_add_files() -> None:
-            files, _ = QFileDialog.getOpenFileNames(
-                widget, "Choisir les médias à organiser", "", "Médias (*.*)"
+            sources = _parse_paths(sources_edit.toPlainText())
+            files = choose_open_files(
+                widget,
+                "Choisir les médias à organiser",
+                preferred=sources[0] if sources else None,
+                fallback=dest_edit.text().strip() or None,
+                name_filter="Médias (*.*)",
             )
             if files:
                 _append_paths(sources_edit, files)
 
         def on_add_folder() -> None:
-            folder = QFileDialog.getExistingDirectory(widget, "Choisir un dossier de médias")
+            sources = _parse_paths(sources_edit.toPlainText())
+            folder = choose_directory(
+                widget,
+                "Choisir un dossier de médias",
+                preferred=sources[0] if sources else None,
+                fallback=dest_edit.text().strip() or None,
+            )
             if folder:
                 _append_paths(sources_edit, [folder])
 
@@ -684,7 +702,9 @@ def create_creators_widget(
         clear_sources_btn.clicked.connect(sources_edit.clear)
         browse_dest_btn.clicked.connect(
             lambda: dest_edit.setText(
-                QFileDialog.getExistingDirectory(widget, "Dossier de destination", dest_edit.text())
+                choose_directory(
+                    widget, "Dossier de destination", preferred=dest_edit.text().strip() or None
+                )
                 or dest_edit.text()
             )
         )
@@ -861,16 +881,26 @@ def create_creators_widget(
             extra = "\n".join(paths)
             sources_edit.setPlainText(f"{current}\n{extra}".strip() if current else extra)
 
-        add_files_btn.clicked.connect(
-            lambda: _append_paths(
-                QFileDialog.getOpenFileNames(widget, "Choisir des fichiers", "", "Tous (*.*)")[0]
+        def _add_files() -> None:
+            sources = _parse_paths(sources_edit.toPlainText())
+            _append_paths(
+                choose_open_files(
+                    widget,
+                    "Choisir des fichiers",
+                    preferred=sources[0] if sources else None,
+                )
             )
-        )
-        add_folder_btn.clicked.connect(
-            lambda: _append_paths(
-                [QFileDialog.getExistingDirectory(widget, "Choisir un dossier")] or []
+
+        def _add_folder() -> None:
+            sources = _parse_paths(sources_edit.toPlainText())
+            folder = choose_directory(
+                widget, "Choisir un dossier", preferred=sources[0] if sources else None
             )
-        )
+            if folder:  # annulation : ne rien ajouter (pas même une ligne vide)
+                _append_paths([folder])
+
+        add_files_btn.clicked.connect(_add_files)
+        add_folder_btn.clicked.connect(_add_folder)
         clear_btn.clicked.connect(sources_edit.clear)
         sources_edit.textChanged.connect(refresh_preview)
         template_edit.textChanged.connect(refresh_preview)
@@ -953,7 +983,12 @@ def create_creators_widget(
         state: dict[str, Any] = {"report": None}
 
         def on_browse_media() -> None:
-            filename, _ = QFileDialog.getOpenFileName(widget, "Choisir un média", "", "Tous (*.*)")
+            filename = choose_open_file(
+                widget,
+                "Choisir un média",
+                preferred=media_edit.text().strip() or None,
+                fallback=dest_edit.text().strip() or None,
+            )
             if filename:
                 media_edit.setText(filename)
                 if not dest_edit.text().strip():
@@ -1104,7 +1139,9 @@ def create_creators_widget(
         browse_media_btn.clicked.connect(on_browse_media)
         browse_dest_btn.clicked.connect(
             lambda: dest_edit.setText(
-                QFileDialog.getExistingDirectory(widget, "Dossier des extraits", dest_edit.text())
+                choose_directory(
+                    widget, "Dossier des extraits", preferred=dest_edit.text().strip() or None
+                )
                 or dest_edit.text()
             )
         )
@@ -1259,8 +1296,8 @@ def create_creators_widget(
             if not state["rows"]:
                 return
             suggested = Path(folder_edit.text().strip() or Path.home()) / "inventaire-overload.csv"
-            chosen, _ = QFileDialog.getSaveFileName(
-                widget, "Exporter l'inventaire", str(suggested), "CSV (*.csv)"
+            chosen = choose_save_file(
+                widget, "Exporter l'inventaire", suggested=suggested, name_filter="CSV (*.csv)"
             )
             if not chosen:
                 return
@@ -1281,8 +1318,8 @@ def create_creators_widget(
 
         browse_btn.clicked.connect(
             lambda: folder_edit.setText(
-                QFileDialog.getExistingDirectory(
-                    widget, "Dossier à inventorier", folder_edit.text()
+                choose_directory(
+                    widget, "Dossier à inventorier", preferred=folder_edit.text().strip() or None
                 )
                 or folder_edit.text()
             )

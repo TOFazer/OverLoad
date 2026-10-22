@@ -1,10 +1,12 @@
 """Système de design d'OverLoad : palettes, typographie et feuilles de style Qt.
 
-L'interface native partage une identité visuelle unique : fonds profonds, cartes
-légèrement plus claires, accent configurable (violet par défaut) et typographie
-Segoe UI Variable sur Windows. Toutes les valeurs sont centralisées ici afin que
-les composants dessinés à la main (barres de progression, vignettes, icônes) et
-les feuilles de style QSS restent parfaitement cohérents.
+L'interface native suit l'identité « OverX Forest » : forêt de nuit, vert sapin
+profond, charbon, vert mousse et vert sauge, texte crème naturel. C'est l'accent
+par défaut ; les autres accents restent personnalisables sans changer le socle
+forestier des fonds. Typographie Manrope / Inter si disponible, sinon Segoe UI
+Variable sur Windows. Toutes les valeurs sont centralisées ici afin que les
+composants dessinés à la main (barres de progression, vignettes, icônes) et les
+feuilles de style QSS restent parfaitement cohérents.
 """
 
 from __future__ import annotations
@@ -14,7 +16,16 @@ import zlib
 from dataclasses import dataclass
 from pathlib import Path
 
-DEFAULT_ACCENT = "violet"
+DEFAULT_ACCENT = "forest"
+
+# Identité « OverX Forest » (OverLoad uniquement) : forêt de nuit, naturelle et
+# premium — aucun vert fluo. Ces constantes sont la référence de la palette.
+FOREST_PINE = "#14251B"  # vert sapin — fond principal (sombre)
+FOREST_BRAND = "#244A35"  # vert forêt — couleur de marque
+FOREST_MOSS = "#52765B"  # vert mousse — boutons et éléments actifs
+FOREST_SAGE = "#A8BFA5"  # vert sauge — détails, texte secondaire (sombre)
+FOREST_CREAM = "#E8EDE5"  # crème naturel — texte principal (sombre)
+FOREST_CHARCOAL = "#202722"  # charbon — cartes et panneaux (sombre)
 
 
 @dataclass(frozen=True)
@@ -46,6 +57,18 @@ class Accent:
 
 
 ACCENTS: dict[str, Accent] = {
+    "forest": Accent(
+        key="forest",
+        label="Forêt (OverX)",
+        # Sombre : mousse pour les boutons (blanc lisible dessus), forêt au repos.
+        dark=FOREST_MOSS,
+        dark_hover="#68896E",
+        dark_pressed=FOREST_BRAND,
+        # Clair : forêt en bouton, sapin une fois pressé, mousse au survol.
+        light=FOREST_BRAND,
+        light_hover=FOREST_MOSS,
+        light_pressed=FOREST_PINE,
+    ),
     "violet": Accent(
         key="violet",
         label="Violet",
@@ -174,69 +197,72 @@ def palette(theme: str = "dark", accent: str = DEFAULT_ACCENT) -> Palette:
     hover = accent_def.hover(theme)
     pressed = accent_def.pressed(theme)
     if theme == "light":
+        # Clair « jour en forêt » : crème et sauge pâle, texte sapin.
         return Palette(
             theme=theme,
             accent_key=accent_def.key,
-            canvas="#F3F4F9",
-            canvas_soft="#ECEEF5",
-            sidebar="#FFFFFF",
-            surface="#FFFFFF",
-            surface_alt="#F7F8FC",
-            surface_hover="#EFF1F8",
+            canvas="#EDF2EA",
+            canvas_soft="#E3EBDE",
+            sidebar="#F7FAF3",
+            surface="#FCFDF9",
+            surface_alt="#EEF4E9",
+            surface_hover="#E2EDDA",
             input="#FFFFFF",
-            input_focus="#FBFAFF",
-            border="#E3E6EF",
-            border_strong="#C9CFDD",
-            text="#141722",
-            text_secondary="#5B6478",
-            text_muted="#8B93A7",
+            input_focus="#F4F9F0",
+            border="#CFDCC8",
+            border_strong="#A7BB9C",
+            text=FOREST_PINE,
+            text_secondary="#3F5747",
+            text_muted="#667A6B",
             accent=base,
             accent_hover=hover,
             accent_pressed=pressed,
             accent_ink=accent_def.ink,
             accent_soft=_rgba(base, 0.10),
             accent_softer=_rgba(base, 0.055),
-            info="#0284C7",
-            info_soft="rgba(2, 132, 199, 0.10)",
-            success="#059669",
-            success_soft="rgba(5, 150, 105, 0.10)",
-            warning="#B45309",
-            warning_soft="rgba(180, 83, 9, 0.10)",
-            danger="#DC2626",
-            danger_soft="rgba(220, 38, 38, 0.09)",
-            overlay="rgba(255, 255, 255, 0.92)",
+            info="#2F6B7A",
+            info_soft="rgba(47, 107, 122, 0.10)",
+            success="#2E7D4F",
+            success_soft="rgba(46, 125, 79, 0.10)",
+            warning="#96690F",
+            warning_soft="rgba(150, 105, 15, 0.10)",
+            danger="#B23A2C",
+            danger_soft="rgba(178, 58, 44, 0.09)",
+            overlay="rgba(252, 253, 249, 0.92)",
         )
+    # Sombre « forêt de nuit » : sapin et charbon d'abord, mousse en action,
+    # sauge en détail, crème en texte.
     return Palette(
         theme=theme,
         accent_key=accent_def.key,
-        canvas="#111318",
-        canvas_soft="#0D0F14",
-        sidebar="#0D0F14",
-        surface="#1B1E27",
-        surface_alt="#20242F",
-        surface_hover="#262B38",
-        input="#151821",
-        input_focus="#191D28",
-        border="#292E3B",
-        border_strong="#3A4152",
-        text="#F3F5F9",
-        text_secondary="#A3ABBD",
-        text_muted="#737C90",
+        canvas=FOREST_PINE,
+        canvas_soft="#0E1B13",
+        sidebar="#0E1B13",
+        surface=FOREST_CHARCOAL,
+        surface_alt="#28312B",
+        surface_hover="#323E35",
+        input="#16241B",
+        input_focus="#1B2E22",
+        border="#2D3D33",
+        border_strong="#485C4E",
+        text=FOREST_CREAM,
+        text_secondary=FOREST_SAGE,
+        text_muted="#8AA08D",
         accent=base,
         accent_hover=hover,
         accent_pressed=pressed,
         accent_ink=accent_def.ink,
-        accent_soft=_rgba(base, 0.15),
-        accent_softer=_rgba(base, 0.075),
-        info="#38BDF8",
-        info_soft="rgba(56, 189, 248, 0.13)",
-        success="#34D399",
-        success_soft="rgba(52, 211, 153, 0.13)",
-        warning="#FBBF24",
-        warning_soft="rgba(251, 191, 36, 0.13)",
-        danger="#F87171",
-        danger_soft="rgba(248, 113, 113, 0.13)",
-        overlay="rgba(17, 19, 24, 0.88)",
+        accent_soft=_rgba(base, 0.18),
+        accent_softer=_rgba(base, 0.09),
+        info="#8FB8C4",
+        info_soft="rgba(143, 184, 196, 0.13)",
+        success="#86B98A",
+        success_soft="rgba(134, 185, 138, 0.13)",
+        warning="#D9B36A",
+        warning_soft="rgba(217, 179, 106, 0.13)",
+        danger="#E38B7D",
+        danger_soft="rgba(227, 139, 125, 0.13)",
+        overlay="rgba(14, 27, 19, 0.88)",
     )
 
 
@@ -380,11 +406,15 @@ def scale_factor(ui_scale: str) -> float:
 
 
 def font_family() -> str:
-    return '"Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", "Inter", "Arial"'
+    # Signature OverX : Manrope / Inter si installées, sinon Segoe UI (Windows).
+    return '"Manrope", "Inter", "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", "Arial"'
 
 
 def display_family() -> str:
-    return '"Segoe UI Variable Display", "Segoe UI Variable", "Segoe UI", "Inter", "Arial"'
+    return (
+        '"Manrope", "Inter", "Segoe UI Variable Display", "Segoe UI Variable", '
+        '"Segoe UI", "Arial"'
+    )
 
 
 def build_stylesheet(
@@ -1107,7 +1137,9 @@ def apply_appearance(
     app.setStyle("Fusion")
 
     font = QFont()
-    font.setFamilies(["Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", "Inter", "Arial"])
+    font.setFamilies(
+        ["Manrope", "Inter", "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", "Arial"]
+    )
     font.setPixelSize(max(10, round(13 * f)))
     app.setFont(font)
 
